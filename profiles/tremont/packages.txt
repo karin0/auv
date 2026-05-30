@@ -1,0 +1,3 @@
+include ../../common.txt
+qbittorrent-enhanced-nox-git
+qt6-base-headless

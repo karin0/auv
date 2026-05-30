@@ -1,0 +1,5 @@
+# Generic, march-independent packages (Repackaged binaries with no compile/build steps)
+google-chrome
+visual-studio-code-bin
+jetbrains-toolbox
+antigravity-ide
