@@ -74,4 +74,35 @@ if [[ -f "$DB_FILE" ]]; then
 fi
 
 # Run build
-NO_CHROOT=1 exec ./sync.sh "profiles/$PROFILE"
+NO_CHROOT=1 ./sync.sh "profiles/$PROFILE"
+
+# Rename packages containing colons to avoid GitHub and pacman 404 errors
+echo "=== Checking for packages with colons in filenames ==="
+shopt -s nullglob
+REPO_DIR="/workspace/repos/$PROFILE"
+for pkg_file in "$REPO_DIR"/*.pkg.tar.zst; do
+  filename=$(basename "$pkg_file")
+  if [[ "$filename" == *:* ]]; then
+    new_filename=$(echo "$filename" | sed 's/:/-colon-/g')
+    new_pkg_file="$REPO_DIR/$new_filename"
+    
+    echo "Renaming $filename to $new_filename in database..."
+    
+    # Extract package name from filename using pacman inside the container
+    pkg_name=$(pacman -Qp "$pkg_file" | awk '{print $1}')
+    
+    # Remove the old entry with the colon from the database
+    repo-remove "$DB_FILE" "$pkg_name"
+    
+    # Move the physical file to the new name without colons
+    mv "$pkg_file" "$new_pkg_file"
+    
+    # Also rename the signature file if it exists
+    if [[ -f "$pkg_file.sig" ]]; then
+      mv "$pkg_file.sig" "$new_pkg_file.sig"
+    fi
+    
+    # Add the renamed package back to the database
+    repo-add "$DB_FILE" "$new_pkg_file"
+  fi
+done
