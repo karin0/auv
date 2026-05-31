@@ -53,7 +53,6 @@ if [[ -f "$MISSING_FILE" ]]; then
     echo "Removing $pkg_name from database to trigger rebuild..."
     repo-remove "$DB_FILE" "$pkg_name"
   done < "$MISSING_FILE"
-  rm "$MISSING_FILE"
 fi
 
 # Remove historical debug packages from database
