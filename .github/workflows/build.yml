@@ -5,11 +5,11 @@ on:
     branches:
       - main
   schedule:
-    - cron: '0 2 * * *'      # Automaticaly runs daily at 2:00 AM UTC
-  workflow_dispatch:         # Allows manually triggering the build pipeline via the GitHub Web UI
+    - cron: '0 6,14,22 * * *'
+  workflow_dispatch:
 
 permissions:
-  contents: write            # Grants write access to create/update releases and upload assets
+  contents: write
 
 jobs:
   build-and-publish:
@@ -22,7 +22,6 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      # 1. Cache Pacman Packages: Cache downloaded .pkg.tar.zst dependencies to speed up container setup
       - name: Cache Pacman Packages
         uses: actions/cache@v5
         with:
@@ -31,7 +30,6 @@ jobs:
           restore-keys: |
             pacman-cache-${{ matrix.profile }}-
 
-      # 2. Cache AUR Clones: Cache cloned AUR git repositories to speed up fetch/patch steps
       - name: Cache AUR Clones
         uses: actions/cache@v5
         with:
@@ -40,14 +38,12 @@ jobs:
           restore-keys: |
             aur-clones-${{ matrix.profile }}-
 
-      # 3. Incremental Sync: Download only the active database files and active packages
-      - name: Download Existing Release Packages
+      - name: Download Existing Database
         run: ./scripts/download-release-assets.sh ${{ matrix.profile }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
 
-      # 4. Run compilation inside a clean Arch Linux container
       - name: Build Packages in Arch Container
         run: |
           mkdir -p pacman-cache clones
@@ -59,15 +55,13 @@ jobs:
             archlinux:latest \
             ./scripts/build-in-container.sh ${{ matrix.profile }}
 
-      # 5. Sync & Clean: Clean obsolete packages, resolve symlinks, and remove old release assets
       - name: Synchronize and Clean Repository Assets
         run: ./scripts/clean-release-assets.sh ${{ matrix.profile }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
 
-      # 6. Publish: Ensure the dedicated architecture Release Tag exists
-      - name: Ensure Dedicated Release Tag Exists
+      - name: Ensure Release Tag Exists
         run: |
           gh release create ${{ matrix.profile }} \
             --title ${{ matrix.profile }} \
@@ -75,8 +69,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # 7. Incremental Release Update: Upload and overwrite (.db.tar.zst and updated .pkg.tar.zst)
-      # Unchanged packages remain safely untouched inside the release without re-uploading!
       - name: Upload and Clobber Assets to Release Channel
         run: |
           gh release upload ${{ matrix.profile }} \
