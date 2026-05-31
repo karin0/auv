@@ -7,36 +7,33 @@ if [[ -z "$PROFILE" ]]; then
   exit 1
 fi
 
-# If running as root, perform system setup and then re-execute this script as the builder user
+# Set up system and re-execute as builder user if running as root
 if [[ "$EUID" -eq 0 ]]; then
-  # A. Initialize the pacman keyring
   pacman-key --init
   pacman-key --populate archlinux
 
-  # B. Install dependencies (expect is required by aurutils to prevent /dev/tty fallback errors)
+  # Install dependencies (expect is required by aurutils to avoid tty issues)
   pacman -Syu --noconfirm base-devel expect
 
-  # C. Disable pacman 7 landlock sandbox (unsupported on GitHub runners)
+  # Disable pacman 7 sandbox (unsupported on GitHub runners)
   sed -i 's,#DisableSandbox,DisableSandbox,' /etc/pacman.conf
 
-  # D. Create unprivileged builder user matching host runner's UID/GID to avoid permission issues
+  # Create builder user matching host's UID/GID
   host_uid=$(stat -c '%u' /workspace)
   host_gid=$(stat -c '%g' /workspace)
   groupadd -g "$host_gid" builder || true
   useradd -m -u "$host_uid" -g builder builder || true
   echo 'builder ALL=(ALL:ALL) NOPASSWD: ALL' >> /etc/sudoers
 
-  # E. Grant builder user ownership of workspace and pacman cache for compilation and caching
   chown -R builder:builder /workspace
   chown -R builder:builder /var/cache/pacman/pkg
 
-  # F. Re-execute this exact script as the unprivileged builder user
   exec sudo -H -u builder env PATH="$PATH" "$0" "$@"
 fi
 
-# --- Beyond this point, the script runs entirely as the unprivileged builder user ---
+# --- Runs as builder user ---
 
-# F. Download, compile, and install aurutils inside builder's home directory
+# Install aurutils
 cd ~
 curl -sSfLO https://aur.archlinux.org/cgit/aur.git/snapshot/aurutils.tar.gz
 tar -xf aurutils.tar.gz
@@ -44,10 +41,9 @@ cd aurutils
 makepkg --syncdeps --noconfirm --skippgpcheck
 sudo pacman -U --noconfirm aurutils-*.pkg.tar.zst
 
-# Return to the mounted workspace directory
 cd /workspace
 
-# G. Self-healing: if a missing packages manifest was generated on the host, prune them from the database
+# Remove missing packages from database to trigger rebuild
 MISSING_FILE="/workspace/repos/$PROFILE/missing_packages.txt"
 DB_FILE="/workspace/repos/$PROFILE/aur-$PROFILE.db.tar.zst"
 if [[ -f "$MISSING_FILE" ]]; then
@@ -60,7 +56,7 @@ if [[ -f "$MISSING_FILE" ]]; then
   rm "$MISSING_FILE"
 fi
 
-# Prune any historical debug packages from the database as well
+# Remove historical debug packages from database
 if [[ -f "$DB_FILE" ]]; then
   echo 'Self-healing: removing any historical debug packages from database...'
   DEBUG_PKGS=$(tar --wildcards -xOf "$DB_FILE" '*/desc' | awk '
@@ -77,5 +73,5 @@ if [[ -f "$DB_FILE" ]]; then
   fi
 fi
 
-# H. Execute high-performance declarative sync script without chroot
+# Run build
 NO_CHROOT=1 exec ./sync.sh "profiles/$PROFILE"

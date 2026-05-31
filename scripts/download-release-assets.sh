@@ -27,7 +27,7 @@ for ext in db files; do
   fi
 done
 
-# B. Verify database integrity against remote Release assets to recover any missing packages
+# Verify database integrity against remote Release assets to recover any missing packages
 DB_FILE="$REPO_DIR/$REPO_NAME.db.tar.zst"
 MISSING_FILE="$REPO_DIR/missing_packages.txt"
 rm -f "$MISSING_FILE"

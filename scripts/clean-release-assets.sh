@@ -1,7 +1,6 @@
 #!/bin/bash
 set -eo pipefail
 
-# Enable nullglob so unmatched wildcards expand to an empty list instead of the pattern literal
 shopt -s nullglob
 
 PROFILE=$1
@@ -13,7 +12,7 @@ fi
 REPO_DIR="repos/$PROFILE"
 REPO_NAME="aur-$PROFILE"
 
-# A. Clean up obsolete local and remote package files not registered in the database
+# Clean obsolete local and remote package files not registered in the database
 if [[ -f "$REPO_DIR/$REPO_NAME.db.tar.zst" ]]; then
   echo "=== [1/3] Extracting active packages from database ==="
   ACTIVE_PKGS=$(tar --wildcards -xOf "$REPO_DIR/$REPO_NAME.db.tar.zst" '*/desc' | grep -A 1 '%FILENAME%' | grep -v '%FILENAME%' | grep -v '^--$' || true)
@@ -27,12 +26,11 @@ if [[ -f "$REPO_DIR/$REPO_NAME.db.tar.zst" ]]; then
     fi
   done
 
-  # Clean up obsolete remote release assets on GitHub that are no longer active in the database
+# Clean up obsolete remote release assets on GitHub that are no longer in the database
   echo "=== [3/3] Syncing GitHub Release assets with database ==="
   if ASSETS=$(gh release view "$PROFILE" --json assets --jq '.assets[].name' --repo "$GITHUB_REPOSITORY" 2>/dev/null); then
     echo "$ASSETS" | while read -r asset; do
       [[ -n "$asset" ]] || continue
-      # Only delete package assets (.pkg.tar.zst or .pkg.tar.zst.sig) that are not in the active database list
       if [[ "$asset" == *.pkg.tar.zst || "$asset" == *.pkg.tar.zst.sig ]]; then
         pkg_filename="${asset%.sig}"
         if ! echo "$ACTIVE_PKGS" | grep -Fqx "$pkg_filename"; then
@@ -46,9 +44,8 @@ else
   echo "=== No database found in $REPO_DIR. Skipping package and release asset cleanup. ==="
 fi
 
-# B. Resolve symlinks and clean temporary backups
+# Resolve database symlinks and clean backups
 echo "=== Resolving pacman database symlinks and cleaning backups ==="
-# Remove temporary .old database backups created by repo-add
 for old_file in "$REPO_DIR"/*.old; do
   echo "Removing temporary database backup: $(basename "$old_file")"
   rm "$old_file"
