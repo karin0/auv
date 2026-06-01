@@ -57,6 +57,8 @@ fi
 
 PACMAN_CONF=$(mktemp --tmpdir "pacman-aur-$ARCH.XXXXXX")
 MAKEPKG_TEMP_CONF=$(mktemp --tmpdir "makepkg-aur-$ARCH.XXXXXX")
+BUILD_QUEUE=$(mktemp --tmpdir "aur-queue-$ARCH.XXXXXX")
+trap 'rm -f "$PACMAN_CONF" "$MAKEPKG_TEMP_CONF" "$BUILD_QUEUE"' EXIT INT TERM
 
 # Merge defaults with profile overrides
 cat /etc/makepkg.conf "$MAKEPKG_CONF" > "$MAKEPKG_TEMP_CONF"
@@ -101,43 +103,55 @@ if [[ -n "$GITHUB_REPOSITORY" ]]; then
   echo "Server = https://github.com/${GITHUB_REPOSITORY}/releases/download/$ARCH" >> "$PACMAN_CONF"
 fi
 
-# Fetch and patch packages
+# Set AURDEST for clones
 export AURDEST="$PWD/clones"
 mkdir -p "$AURDEST"
-for pkg in "${PACKAGES[@]}"; do
-  if [[ -f "$PWD/patches/$pkg.patch" || -x "$PWD/patches/$pkg.sh" ]]; then
-    echo "[$ARCH] Custom patch/script detected for $pkg. Pre-fetching..."
-    ( cd "$AURDEST" && aur fetch "$pkg" )
 
-    # Reset clone to clean state
-    git -C "$AURDEST/$pkg" reset --hard >/dev/null 2>&1 || true
-    git -C "$AURDEST/$pkg" clean -df >/dev/null 2>&1 || true
-
-    if [[ -f "$PWD/patches/$pkg.patch" ]]; then
-      echo "[$ARCH] Applying custom patch for $pkg..."
-      git -C "$AURDEST/$pkg" apply "$PWD/patches/$pkg.patch"
-    elif [[ -x "$PWD/patches/$pkg.sh" ]]; then
-      echo "[$ARCH] Executing custom patch script for $pkg..."
-      "$PWD/patches/$pkg.sh" "$AURDEST/$pkg"
-    fi
-  fi
-done
-
-# Run sync
-AUR_SYNC_ARGS=(
+# Common options shared by both aur sync and aur build
+AUR_ARGS=(
   -d "$REPO_NAME"
   --pacman-conf "$PACMAN_CONF"
   --makepkg-conf "$MAKEPKG_TEMP_CONF"
-  --noview
   --noconfirm
   -r
   -C
 )
 
-# If NO_CHROOT is set, build without systemd-nspawn container
 if [[ "${NO_CHROOT}" != "1" ]]; then
-  AUR_SYNC_ARGS+=( -c -D "$CHROOT_DIR" )
+  AUR_ARGS+=( -c -D "$CHROOT_DIR" )
 fi
 
-trap 'rm -f "$PACMAN_CONF" "$MAKEPKG_TEMP_CONF"' EXIT INT TERM
-aur sync "${AUR_SYNC_ARGS[@]}" "${PACKAGES[@]}"
+# Find out which packages actually need to be updated/built
+echo "[$ARCH] Analyzing dependencies and fetching packages..."
+aur sync --nobuild --noview "${AUR_ARGS[@]}" "${PACKAGES[@]}" > "$BUILD_QUEUE"
+
+if [[ ! -s "$BUILD_QUEUE" ]]; then
+  echo "[$ARCH] There is nothing to do."
+  exit 0
+fi
+
+echo "[$ARCH] The following packages need to be built:"
+cat "$BUILD_QUEUE"
+
+# Apply custom patches/scripts to the newly fetched/updated packages
+while read -r pkg_dir; do
+  [[ -z "$pkg_dir" ]] && continue
+  pkg=$(basename "$pkg_dir")
+
+  if [[ -f "$PWD/patches/$pkg.patch" || -x "$PWD/patches/$pkg.sh" ]]; then
+    git -C "$pkg_dir" reset --hard
+    git -C "$pkg_dir" clean -df
+
+    if [[ -f "$PWD/patches/$pkg.patch" ]]; then
+      echo "[$ARCH] Applying custom patch for $pkg..."
+      git -C "$pkg_dir" apply "$PWD/patches/$pkg.patch"
+    elif [[ -x "$PWD/patches/$pkg.sh" ]]; then
+      echo "[$ARCH] Executing custom patch script for $pkg..."
+      "$PWD/patches/$pkg.sh" "$pkg_dir"
+    fi
+  fi
+done < "$BUILD_QUEUE"
+
+# 3. Build Phase: Build the packages using aur build
+echo "[$ARCH] Starting build for the packages in the queue..."
+aur build "${AUR_ARGS[@]}" -s -a "$BUILD_QUEUE"
