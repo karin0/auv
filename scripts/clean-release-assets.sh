@@ -10,10 +10,8 @@ if [[ -z "$PROFILE" ]]; then
 fi
 
 REPO_DIR="repos/$PROFILE"
-REPO_NAME="aur-$PROFILE"
-STATE_DIR="state/$PROFILE"
-ACTIVE_FILE="$STATE_DIR/active-packages.txt"
-NOTIFY_FILE="$STATE_DIR/notify-body.txt"
+ACTIVE_FILE="state/$PROFILE/active-packages.txt"
+NOTIFY_FILE="state/$PROFILE/notify-body.txt"
 
 # Runs on the GitHub runner: no database parsing, only gh/Telegram and the file
 # work the container left under state/<profile>/.
@@ -37,18 +35,22 @@ else
   echo "=== Empty or missing active-package list. Skipping asset cleanup. ==="
 fi
 
+cd "$REPO_DIR"
+
+# Remove database backups so they aren't uploaded as assets
+rm -f -- *.old
+
 # Resolve database symlinks (symlinks fail to upload as release assets)
-for ext in db files; do
-  if [[ -L "$REPO_DIR/$REPO_NAME.$ext" ]]; then
-    echo "Converting symlink $REPO_NAME.$ext to actual file..."
-    target=$(readlink "$REPO_DIR/$REPO_NAME.$ext")
-    rm "$REPO_DIR/$REPO_NAME.$ext"
-    cp "$REPO_DIR/$target" "$REPO_DIR/$REPO_NAME.$ext"
+for file in *; do
+  if [[ -L $file ]]; then
+    target=$(readlink "$file")
+    echo "Converting symlink $file to target $target ..."
+    rm "$file"
+    cp "$target" "$file"
   fi
 done
 
-# Remove database backups so they aren't uploaded as assets
-rm -f "$REPO_DIR"/*.old
+cd -
 
 # Notify with the body the container assembled, prefixed by the run-context header
 if [[ -s "$NOTIFY_FILE" ]]; then
