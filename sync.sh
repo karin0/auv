@@ -90,6 +90,20 @@ if [[ ! -f "$DB_FILE" ]]; then
   repo-add "$DB_FILE"
 fi
 
+# Reconcile database to drop obsolete packages (those deleted from packages.txt and their dependencies)
+if [[ -f "$DB_FILE" && ${#PACKAGES[@]} -gt 0 ]]; then
+  echo "[$ARCH] Reconciling database to drop obsolete packages..."
+  OBSOLETE_PKGS=$(comm -23 \
+    <(repo-list "$DB_FILE" name 2>/dev/null | sort || true) \
+    <( (aur depends -n "${PACKAGES[@]}" 2>/dev/null | tr '\t' '\n'; printf '%s\n' "${PACKAGES[@]}") | sort -u ) \
+    | xargs || true)
+
+  if [[ -n "$OBSOLETE_PKGS" ]]; then
+    echo "[$ARCH] Removing obsolete packages from database: $OBSOLETE_PKGS"
+    repo-remove "$DB_FILE" $OBSOLETE_PKGS
+  fi
+fi
+
 # Generate custom pacman.conf
 cp /etc/pacman.conf "$PACMAN_CONF"
 cat <<EOF >> "$PACMAN_CONF"
