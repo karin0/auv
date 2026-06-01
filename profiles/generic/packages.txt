@@ -1,6 +1,7 @@
 # Generic, march-independent packages (Repackaged binaries with no compile/build steps)
 aurutils
 byobu
+64gram-desktop-bin
 google-chrome
 visual-studio-code-bin
 jetbrains-toolbox

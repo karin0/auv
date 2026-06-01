@@ -1,2 +1,2 @@
-64gram-desktop-bin
+64gram-desktop
 gnome-shell-extension-kimpanel-git
