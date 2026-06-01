@@ -17,14 +17,15 @@ if [[ "$EUID" -eq 0 ]]; then
   # Install dependencies (expect is required by aurutils, pacman-contrib for paccache)
   pacman -Syu --noconfirm base-devel expect pacman-contrib
 
-  # Disable pacman 7 sandbox (unsupported on GitHub runners)
-  sed -i 's,#DisableSandbox,DisableSandbox,' /etc/pacman.conf
-
   # Create builder user matching host's UID/GID
   host_uid=$(stat -c '%u' /workspace)
   host_gid=$(stat -c '%g' /workspace)
-  groupadd -g "$host_gid" builder || true
-  useradd -m -u "$host_uid" -g builder builder || true
+  groupadd -g "$host_gid" builder
+
+  # Add builder to the alpm group so pacman's local-repository download user can
+  # access generated files
+  useradd -m -u "$host_uid" -g builder -G alpm builder
+
   echo 'builder ALL=(ALL:ALL) NOPASSWD: ALL' >> /etc/sudoers
 
   chown -R builder:builder /workspace
@@ -83,7 +84,7 @@ REPO_DIR="/workspace/repos/$PROFILE"
 for pkg_file in "$REPO_DIR"/*.pkg.tar.zst; do
   filename=$(basename "$pkg_file")
   if [[ "$filename" == *:* ]]; then
-    new_filename=$(echo "$filename" | sed 's/:/-colon-/g')
+    new_filename="${filename//:/-colon-}"
     new_pkg_file="$REPO_DIR/$new_filename"
 
     echo "Renaming $filename to $new_filename in database..."
