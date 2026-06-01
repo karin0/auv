@@ -26,7 +26,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: pacman-cache
-          key: pacman-cache-${{ matrix.profile }}-${{ hashFiles('profiles/${{ matrix.profile }}/packages.txt') }}
+          key: pacman-cache-${{ matrix.profile }}-${{ github.run_id }}
           restore-keys: |
             pacman-cache-${{ matrix.profile }}-
 
@@ -34,7 +34,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: clones
-          key: aur-clones-${{ matrix.profile }}-${{ hashFiles('profiles/${{ matrix.profile }}/packages.txt') }}
+          key: aur-clones-${{ matrix.profile }}-${{ github.run_id }}
           restore-keys: |
             aur-clones-${{ matrix.profile }}-
 
@@ -54,6 +54,8 @@ jobs:
             -e NO_CHROOT=1 \
             archlinux:latest \
             ./scripts/build-in-container.sh ${{ matrix.profile }}
+          sudo chown -R $USER:$USER pacman-cache clones
+
 
       - name: Synchronize and Clean Repository Assets
         run: ./scripts/clean-release-assets.sh ${{ matrix.profile }}
