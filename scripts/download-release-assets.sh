@@ -42,3 +42,9 @@ if ASSETS=$(gh release view "$PROFILE" --json assets --jq '.assets[].name' --rep
 else
   echo "No release found for '$PROFILE'; integrity check will be skipped."
 fi
+
+# Download the pre-built aurutils package from generic release
+echo "=== Downloading pre-built aurutils from generic release ==="
+gh release download generic \
+  --pattern "aurutils-*.pkg.tar.zst" \
+  --repo "$GITHUB_REPOSITORY" || true

@@ -14,9 +14,9 @@ if [[ "$EUID" -eq 0 ]]; then
   pacman-key --init
   pacman-key --populate archlinux
 
-  # expect is required by aurutils, pacman-contrib for paccache, pyalpm
-  # for repo-list
-  pacman -Syu --noconfirm base-devel expect pacman-contrib pyalpm
+  # expect is required by aurutils for non-interactive sessions
+  # pacman-contrib for paccache, pyalpm for repo-list
+  pacman -Syu --noconfirm base-devel git expect pacman-contrib pyalpm
 
   # Create builder user matching host's UID/GID; alpm group lets pacman's
   # download user reach the files it generates
@@ -35,13 +35,20 @@ fi
 
 # --- Runs as builder user ---
 
-# Install aurutils
-cd ~
-curl -sSfLO https://aur.archlinux.org/cgit/aur.git/snapshot/aurutils.tar.gz
-tar -xf aurutils.tar.gz
-cd aurutils
-makepkg --syncdeps --noconfirm --skippgpcheck
-sudo pacman -U --noconfirm aurutils-*.pkg.tar.zst
+# Install our own pre-built aurutils if available
+prebuilt_aurutils=(/workspace/aurutils-*.pkg.tar.zst)
+if (( ${#prebuilt_aurutils[@]} > 0 )); then
+  echo "Installing pre-built aurutils..."
+  sudo pacman -U --noconfirm "${prebuilt_aurutils[@]}"
+else
+  echo "Bootstrapping aurutils from AUR..."
+  cd ~
+  curl -sSfLO https://aur.archlinux.org/cgit/aur.git/snapshot/aurutils.tar.gz
+  tar -xf aurutils.tar.gz
+  cd aurutils
+  makepkg --syncdeps --noconfirm --skippgpcheck
+  sudo pacman -U --noconfirm aurutils-*.pkg.tar.zst
+fi
 
 cd /workspace
 
