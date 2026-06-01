@@ -14,24 +14,23 @@ if [[ "$EUID" -eq 0 ]]; then
   pacman-key --init
   pacman-key --populate archlinux
 
-  # Install dependencies (expect is required by aurutils, pacman-contrib for paccache)
-  pacman -Syu --noconfirm base-devel expect pacman-contrib
+  # expect is required by aurutils, pacman-contrib for paccache, pyalpm
+  # for repo-list
+  pacman -Syu --noconfirm base-devel expect pacman-contrib pyalpm
 
-  # Create builder user matching host's UID/GID
+  # Create builder user matching host's UID/GID; alpm group lets pacman's
+  # download user reach the files it generates
   host_uid=$(stat -c '%u' /workspace)
   host_gid=$(stat -c '%g' /workspace)
   groupadd -g "$host_gid" builder
-
-  # Add builder to the alpm group so pacman's local-repository download user can
-  # access generated files
   useradd -m -u "$host_uid" -g builder -G alpm builder
-
   echo 'builder ALL=(ALL:ALL) NOPASSWD: ALL' >> /etc/sudoers
 
   chown -R builder:builder /workspace
   chown -R builder:builder /var/cache/pacman/pkg
 
-  exec sudo -H -u builder env PATH="$PATH" "$0" "$@"
+  # Put repo-list and friends on PATH for the builder run
+  exec sudo -H -u builder env PATH="/workspace/scripts:$PATH" "$0" "$@"
 fi
 
 # --- Runs as builder user ---
@@ -46,33 +45,43 @@ sudo pacman -U --noconfirm aurutils-*.pkg.tar.zst
 
 cd /workspace
 
-# Remove missing packages from database to trigger rebuild
-MISSING_FILE="/workspace/repos/$PROFILE/missing_packages.txt"
-DB_FILE="/workspace/repos/$PROFILE/aur-$PROFILE.db.tar.zst"
-if [[ -f "$MISSING_FILE" ]]; then
-  echo 'Self-healing: removing missing packages from database...'
-  while read -r pkg_name || [[ -n "$pkg_name" ]]; do
+# This is the only place that parses the pacman database (where pyalpm and the
+# pacman tools live). The runner-side scripts hand it inputs and read its outputs
+# via files under state/<profile>/.
+REPO_DIR="/workspace/repos/$PROFILE"
+DB_FILE="$REPO_DIR/aur-$PROFILE.db.tar.zst"
+OLD_DB_FILE="$DB_FILE.old"
+STATE_DIR="/workspace/state/$PROFILE"
+RELEASE_ASSETS="$STATE_DIR/release-assets.txt"
+ACTIVE_FILE="$STATE_DIR/active-packages.txt"
+NOTIFY_FILE="$STATE_DIR/notify-body.txt"
+mkdir -p "$STATE_DIR"
+
+NOTIFY_MISSING=""
+NOTIFY_UPDATED=""
+NOTIFY_OBSOLETE=""
+
+# Force a rebuild of any package whose file is missing from the release. The
+# release-assets file is absent when no release exists yet, so skip then.
+if [[ -f "$DB_FILE" && -f "$RELEASE_ASSETS" ]]; then
+  echo 'Reconciling database against release assets...'
+  while IFS=$'\t' read -r pkg_name pkg_file; do
     [[ -n "$pkg_name" ]] || continue
-    echo "Removing $pkg_name from database to trigger rebuild..."
-    repo-remove "$DB_FILE" "$pkg_name"
-  done < "$MISSING_FILE"
+    if ! grep -Fqx "$pkg_file" "$RELEASE_ASSETS"; then
+      echo "Asset $pkg_file missing; removing $pkg_name to trigger rebuild..."
+      repo-remove "$DB_FILE" "$pkg_name"
+      NOTIFY_MISSING+="• ⚠️ <b>Missing</b>: $pkg_name"$'\n'
+    fi
+  done < <(repo-list "$DB_FILE" name filename)
 fi
 
-# Remove historical debug packages from database
+# Drop historical debug packages from the database
 if [[ -f "$DB_FILE" ]]; then
-  echo 'Self-healing: removing any historical debug packages from database...'
-  DEBUG_PKGS=$(tar --wildcards -xOf "$DB_FILE" '*/desc' | awk '
-    /^%NAME%/ { get_name=1; next }
-    get_name { if ($1 ~ /-debug$/) print $1; get_name=0 }
-  ' || true)
-
-  if [[ -n "$DEBUG_PKGS" ]]; then
-    echo "Found debug packages in database: $DEBUG_PKGS"
-    for dpkg in $DEBUG_PKGS; do
-      echo "Removing debug package '$dpkg' from database..."
-      repo-remove "$DB_FILE" "$dpkg"
-    done
-  fi
+  while IFS= read -r pkg_name; do
+    [[ "$pkg_name" == *-debug ]] || continue
+    echo "Removing debug package '$pkg_name' from database..."
+    repo-remove "$DB_FILE" "$pkg_name"
+  done < <(repo-list "$DB_FILE" name)
 fi
 
 # Run build
@@ -80,53 +89,34 @@ NO_CHROOT=1 ./sync.sh "profiles/$PROFILE"
 
 # Rename packages containing colons to avoid GitHub and pacman 404 errors
 echo "=== Checking for packages with colons in filenames ==="
-REPO_DIR="/workspace/repos/$PROFILE"
 for pkg_file in "$REPO_DIR"/*.pkg.tar.zst; do
   filename=$(basename "$pkg_file")
   if [[ "$filename" == *:* ]]; then
     new_filename="${filename//:/-colon-}"
     new_pkg_file="$REPO_DIR/$new_filename"
-
     echo "Renaming $filename to $new_filename in database..."
 
-    # Extract package name from filename using pacman inside the container
     pkg_name=$(pacman -Qp "$pkg_file" | awk '{print $1}')
-
-    # Remove the old entry with the colon from the database
     repo-remove "$DB_FILE" "$pkg_name"
-
-    # Move the physical file to the new name without colons
     mv "$pkg_file" "$new_pkg_file"
-
-    # Also rename the signature file if it exists
-    if [[ -f "$pkg_file.sig" ]]; then
-      mv "$pkg_file.sig" "$new_pkg_file.sig"
-    fi
-
-    # Add the renamed package back to the database
+    [[ -f "$pkg_file.sig" ]] && mv "$pkg_file.sig" "$new_pkg_file.sig"
     repo-add "$DB_FILE" "$new_pkg_file"
   fi
 done
 
-# Clean up pacman cache to avoid GitHub Actions cache bloat
+# Keep only the latest cached version of each package
 echo "=== Cleaning up Pacman cache ==="
-# Keep only the latest version of every downloaded package
 sudo paccache -rk1
 
-# Clean up obsolete AUR clones to avoid cache accumulation
+# Drop AUR clones not registered in the database
 AURDEST="/workspace/clones"
 if [[ -d "$AURDEST" && -f "$DB_FILE" ]]; then
   echo "=== Cleaning up obsolete AUR clones ==="
   declare -A keep_clones
+  while IFS= read -r pkg_name; do
+    [[ -n "$pkg_name" ]] && keep_clones["$pkg_name"]=1
+  done < <(repo-list "$DB_FILE" name)
 
-  # Mark packages currently registered in the repository database as to keep
-  while read -r pkg_name; do
-    if [[ -n "$pkg_name" ]]; then
-      keep_clones["$pkg_name"]=1
-    fi
-  done < <(tar --wildcards -xOf "$DB_FILE" '*/desc' | awk '/^%NAME%/ { get_name=1; next } get_name { print $1; get_name=0 }' 2>/dev/null || true)
-
-  # Remove subdirectories in clones/ that are not registered in the database
   for clone_dir in "$AURDEST"/*/; do
     clone_name=$(basename "$clone_dir")
     if [[ -z "${keep_clones["$clone_name"]}" ]]; then
@@ -135,3 +125,44 @@ if [[ -d "$AURDEST" && -f "$DB_FILE" ]]; then
     fi
   done
 fi
+
+# Hand the runner the active package list and the database-derived notification
+# lines. Only freshly built packages have their .pkg file present (the database
+# alone was downloaded to start with), so the glob below is exactly this run's
+# output.
+if [[ -f "$DB_FILE" ]]; then
+  repo-list "$DB_FILE" filename > "$ACTIVE_FILE"
+
+  # Drop local package files no longer in the database
+  echo "=== Removing obsolete local package files ==="
+  for pkg_file in "$REPO_DIR"/*.pkg.tar.zst; do
+    filename=$(basename "$pkg_file")
+    if ! grep -Fqx "$filename" "$ACTIVE_FILE"; then
+      echo "Deleting obsolete local package: $filename"
+      NOTIFY_OBSOLETE+="• ⚠️ <b>Obsolete file</b>: <code>$filename</code>"$'\n'
+      rm -f "$pkg_file" "$pkg_file.sig"
+    fi
+  done
+
+  echo "=== Detecting built packages ==="
+  declare -A OLD_VERSIONS
+  if [[ -f "$OLD_DB_FILE" ]]; then
+    while IFS=$'\t' read -r name version; do
+      [[ -n "$name" ]] && OLD_VERSIONS["$name"]="$version"
+    done < <(repo-list "$OLD_DB_FILE" name version)
+  fi
+
+  for pkg_file in "$REPO_DIR"/*.pkg.tar.zst; do
+    read -r pkg_name new_ver < <(pacman -Qp "$pkg_file")
+    old_ver="${OLD_VERSIONS["$pkg_name"]}"
+    if [[ -n "$old_ver" ]]; then
+      NOTIFY_UPDATED+="• $pkg_name: <code>$old_ver</code> → <code>$new_ver</code>"$'\n'
+      echo "Updated: $pkg_name ($old_ver -> $new_ver)"
+    else
+      NOTIFY_UPDATED+="• $pkg_name: <code>$new_ver</code>"$'\n'
+      echo "New: $pkg_name ($new_ver)"
+    fi
+  done
+fi
+
+printf '%s' "${NOTIFY_UPDATED}${NOTIFY_MISSING}${NOTIFY_OBSOLETE}" > "$NOTIFY_FILE"

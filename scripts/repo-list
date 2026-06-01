@@ -1,0 +1,44 @@
+#!/usr/bin/env python3
+"""List package fields from a pacman repo database, by exact file path.
+
+Reads exactly the .db file given, isolated from the system pacman.conf, so the
+result is unambiguous regardless of which repositories are configured.
+
+Usage: repo-list <db_file> <field> [<field> ...]
+Fields are pyalpm.Package attributes (e.g. name, version, filename). Prints one
+tab-separated line per package.
+"""
+
+import os
+import sys
+import tempfile
+
+import pyalpm
+
+
+def query(db_file, fields):
+    # libalpm reads a sync db from <dbpath>/sync/<name>.db, so point a throwaway
+    # dbpath at the target file. Reading an on-disk db needs no signature check.
+    with tempfile.TemporaryDirectory(prefix='repo-list-') as scratch:
+        os.mkdir(os.path.join(scratch, 'sync'))
+        os.mkdir(os.path.join(scratch, 'local'))
+        os.symlink(os.path.abspath(db_file), os.path.join(scratch, 'sync', 'repo.db'))
+        db = pyalpm.Handle('/', scratch).register_syncdb('repo', 0)
+        return ['\t'.join(str(getattr(pkg, f)) for f in fields) for pkg in db.pkgcache]
+
+
+def main():
+    if len(sys.argv) < 3:
+        sys.exit('usage: repo-list <db_file> <field> [<field> ...]')
+
+    db_file, fields = sys.argv[1], sys.argv[2:]
+    if not os.path.isfile(db_file):
+        sys.exit(f'repo-list: {db_file}: no such file')
+
+    lines = query(db_file, fields)
+    if lines:
+        print('\n'.join(lines))
+
+
+if __name__ == '__main__':
+    main()

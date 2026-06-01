@@ -9,7 +9,11 @@ fi
 
 REPO_DIR="repos/$PROFILE"
 REPO_NAME="aur-$PROFILE"
-mkdir -p "$REPO_DIR"
+STATE_DIR="state/$PROFILE"
+mkdir -p "$REPO_DIR" "$STATE_DIR"
+
+# Runs on the GitHub runner: only network/gh work. Database parsing happens in
+# the Arch container, fed via files under state/<profile>/.
 
 echo "=== Downloading Pacman database for profile '$PROFILE' ==="
 gh release download "$PROFILE" \
@@ -27,26 +31,14 @@ for ext in db files; do
   fi
 done
 
-# Verify database integrity against remote Release assets to recover any missing packages
-DB_FILE="$REPO_DIR/$REPO_NAME.db.tar.zst"
-MISSING_FILE="$REPO_DIR/missing_packages.txt"
-rm -f "$MISSING_FILE"
-
-if [[ -f "$DB_FILE" ]]; then
-  echo "=== Checking database integrity against remote Release assets ==="
-  if ASSETS=$(gh release view "$PROFILE" --json assets --jq '.assets[].name' --repo "$GITHUB_REPOSITORY" 2>/dev/null); then
-    # Extract package names and filenames from the database desc files
-    tar --wildcards -xOf "$DB_FILE" '*/desc' | awk '
-      /^%NAME%/ { get_name=1; next }
-      /^%FILENAME%/ { get_file=1; next }
-      get_name { name=$1; get_name=0 }
-      get_file { file=$1; get_file=0 }
-      name && file { print name, file; name=""; file="" }
-    ' | while read -r pkg_name pkg_file; do
-      if ! echo "$ASSETS" | grep -Fqx "$pkg_file"; then
-        echo "Package file $pkg_file is missing from Release. Marking $pkg_name for self-healing..."
-        echo "$pkg_name" >> "$MISSING_FILE"
-      fi
-    done
-  fi
+# Snapshot release assets for the container to reconcile against. Written only
+# when the release exists; its absence tells the container to skip the check.
+echo "=== Snapshotting current release assets ==="
+ASSETS_FILE="$STATE_DIR/release-assets.txt"
+rm -f "$ASSETS_FILE"
+if ASSETS=$(gh release view "$PROFILE" --json assets --jq '.assets[].name' --repo "$GITHUB_REPOSITORY" 2>/dev/null); then
+  printf '%s\n' "$ASSETS" > "$ASSETS_FILE"
+  echo "Recorded $(grep -c . "$ASSETS_FILE" || true) release assets."
+else
+  echo "No release found for '$PROFILE'; integrity check will be skipped."
 fi
