@@ -5,3 +5,6 @@ jetbrains-toolbox
 antigravity-ide
 alhp-keyring
 alhp-mirrorlist
+aurutils
+nvidia-580xx-dkms
+nvidia-580xx-utils

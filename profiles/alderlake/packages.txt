@@ -1,5 +1,2 @@
 include ../../common.txt
-aurutils
 gnome-shell-extension-kimpanel-git
-nvidia-580xx-dkms
-nvidia-580xx-utils
