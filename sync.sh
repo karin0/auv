@@ -4,13 +4,10 @@
 
 set -eo pipefail
 
-# Parse package list file recursively, handling comments, empty lines, and 'include'.
+# Parse package list file, ignoring comments and empty lines.
 parse_list() {
   local list_file=$1
   [[ -f "$list_file" ]] || return 0
-
-  local file_dir
-  file_dir=$(dirname "$list_file")
 
   while IFS= read -r line || [[ -n "$line" ]]; do
     # Trim leading/trailing whitespace
@@ -22,17 +19,7 @@ parse_list() {
       continue
     fi
 
-    # Check if the line is an include directive: "include <path>"
-    if [[ "$line" =~ ^include[[:space:]]+(.+)$ ]]; then
-      local include_target="${BASH_REMATCH[1]}"
-      # If the target is not an absolute path, resolve it relative to the current file's directory
-      if [[ "$include_target" != /* ]]; then
-        include_target="$file_dir/$include_target"
-      fi
-      parse_list "$include_target"
-    else
-      echo "$line"
-    fi
+    echo "$line"
   done < "$list_file"
 }
 

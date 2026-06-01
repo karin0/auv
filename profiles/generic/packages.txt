@@ -1,10 +1,11 @@
 # Generic, march-independent packages (Repackaged binaries with no compile/build steps)
+aurutils
+byobu
 google-chrome
 visual-studio-code-bin
 jetbrains-toolbox
 antigravity-ide
 alhp-keyring
 alhp-mirrorlist
-aurutils
 nvidia-580xx-dkms
 nvidia-580xx-utils

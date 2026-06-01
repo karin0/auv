@@ -1,3 +1,2 @@
-include ../../common.txt
 64gram-desktop-bin
 gnome-shell-extension-kimpanel-git
