@@ -5,7 +5,7 @@ on:
     branches:
       - main
   schedule:
-    - cron: '0 6,14,22 * * *'
+    - cron: "0 6,14,22 * * *"
   workflow_dispatch:
 
 permissions:
@@ -20,6 +20,14 @@ jobs:
         profile: [generic, alderlake, tremont, znver5]
 
     steps:
+      # https://github.com/actions/virtual-environments/issues/1918
+      - name: Cleanup pre-installed tools
+        run: |
+          shopt -s nullglob
+          sudo rm -rf /usr/share/{dotnet,swift,az*,gradle*,*conda} \
+            /opt/{ghc,az} \
+            /usr/local/share/boost /usr/local/graalvm /usr/local/julia* "$AGENT_TOOLSDIRECTORY"
+
       - uses: actions/checkout@v6
 
       - name: Cache Pacman Packages
@@ -55,7 +63,6 @@ jobs:
             archlinux:latest \
             ./scripts/build-in-container.sh ${{ matrix.profile }}
           sudo chown -R $USER:$USER pacman-cache clones
-
 
       - name: Synchronize and Clean Repository Assets
         run: ./scripts/clean-release-assets.sh ${{ matrix.profile }}
