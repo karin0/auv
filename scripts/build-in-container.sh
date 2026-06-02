@@ -9,64 +9,25 @@ if [[ -z "$PROFILE" ]]; then
   exit 1
 fi
 
-# Set up system and re-execute as builder user if running as root
-if [[ "$EUID" -eq 0 ]]; then
-  pacman-key --init
-  pacman-key --populate archlinux
+sudo pacman -Syu --noconfirm
 
-  # expect is required by aurutils for non-interactive sessions
-  # pacman-contrib for paccache, pyalpm for repo-list
-  pacman -Syu --noconfirm base-devel git expect pacman-contrib pyalpm
+export PATH="$PWD/scripts:$PATH"
 
-  # Create builder user matching host's UID/GID; alpm group lets pacman's
-  # download user reach the files it generates
-  host_uid=$(stat -c '%u' /workspace)
-  host_gid=$(stat -c '%g' /workspace)
-  groupadd -g "$host_gid" builder
-  useradd -m -u "$host_uid" -g builder -G alpm builder
-  echo 'builder ALL=(ALL:ALL) NOPASSWD: ALL' >> /etc/sudoers
+AURDEST="$PWD/clones"
 
-  chown -R builder:builder /workspace
-  chown -R builder:builder /var/cache/pacman/pkg
+REPO_DIR="repos/$PROFILE"
+STATE_DIR="state/$PROFILE"
+mkdir -p "$STATE_DIR"
 
-  # Put repo-list and friends on PATH for the builder run
-  exec sudo -H -u builder env PATH="/workspace/scripts:$PATH" "$0" "$@"
-fi
-
-# --- Runs as builder user ---
-
-# Install our own pre-built aurutils if available
-prebuilt_aurutils=(/workspace/aurutils-*.pkg.tar.zst)
-if (( ${#prebuilt_aurutils[@]} > 0 )); then
-  echo "Installing pre-built aurutils..."
-  sudo pacman -U --noconfirm "${prebuilt_aurutils[@]}"
-else
-  echo "Bootstrapping aurutils from AUR..."
-  cd ~
-  curl -sSfLO https://aur.archlinux.org/cgit/aur.git/snapshot/aurutils.tar.gz
-  tar -xf aurutils.tar.gz
-  cd aurutils
-  makepkg --syncdeps --noconfirm --skippgpcheck
-  sudo pacman -U --noconfirm aurutils-*.pkg.tar.zst
-fi
-
-cd /workspace
-
-# This is the only place that parses the pacman database (where pyalpm and the
-# pacman tools live). The runner-side scripts hand it inputs and read its outputs
-# via files under state/<profile>/.
-REPO_DIR="/workspace/repos/$PROFILE"
 DB_FILE="$REPO_DIR/aur-$PROFILE.db.tar.zst"
 OLD_DB_FILE="$DB_FILE.old"
-STATE_DIR="/workspace/state/$PROFILE"
 RELEASE_ASSETS="$STATE_DIR/release-assets.txt"
 ACTIVE_FILE="$STATE_DIR/active-packages.txt"
 NOTIFY_FILE="$STATE_DIR/notify-body.txt"
-mkdir -p "$STATE_DIR"
 
-NOTIFY_MISSING=""
-NOTIFY_UPDATED=""
-NOTIFY_OBSOLETE=""
+NOTIFY_MISSING=
+NOTIFY_UPDATED=
+NOTIFY_OBSOLETE=
 
 # Force a rebuild of any package whose file is missing from the release. The
 # release-assets file is absent when no release exists yet, so skip then.
@@ -116,7 +77,6 @@ echo "=== Cleaning up Pacman cache ==="
 sudo paccache -rk1
 
 # Drop AUR clones not registered in the database
-AURDEST="/workspace/clones"
 if [[ -d "$AURDEST" && -f "$DB_FILE" ]]; then
   echo "=== Cleaning up obsolete AUR clones ==="
   declare -A keep_clones

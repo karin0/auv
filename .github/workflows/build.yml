@@ -4,8 +4,11 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - 'docker/**'
+      - '.github/workflows/image.yml'
   schedule:
-    - cron: "0 6,14,22 * * *"
+    - cron: '0 6,14,22 * * *'
   workflow_dispatch:
 
 permissions:
@@ -52,6 +55,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
 
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build Packages in Arch Container
         run: |
           mkdir -p pacman-cache clones
@@ -59,8 +68,7 @@ jobs:
             -v "$PWD":/workspace \
             -v "$PWD/pacman-cache":/var/cache/pacman/pkg \
             -w /workspace \
-            -e NO_CHROOT=1 \
-            archlinux:latest \
+            ghcr.io/${{ github.repository }}/auv-builder:latest \
             ./scripts/build-in-container.sh ${{ matrix.profile }}
           sudo chown -R $USER:$USER pacman-cache clones
 
