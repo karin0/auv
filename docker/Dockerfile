@@ -3,7 +3,7 @@ FROM archlinux:latest
 COPY aurutils-*.pkg.tar.zst ./
 
 # expect is required by aurutils for non-interactive sessions
-# pacman-contrib for paccache, pyalpm for repo-list
+# pacman-contrib for paccache, pyalpm for auv.py
 RUN pacman-key --init && \
     pacman-key --populate archlinux && \
     pacman -Syu --noconfirm base-devel git expect pacman-contrib pyalpm sudo && \

@@ -4,27 +4,9 @@
 
 set -eo pipefail
 
-# Parse package list file, ignoring comments and empty lines.
-parse_list() {
-  local list_file=$1
-  [[ -f "$list_file" ]] || return 0
-
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    # Trim leading/trailing whitespace
-    line="${line#"${line%%[![:space:]]*}"}"
-    line="${line%"${line##*[![:space:]]}"}"
-
-    # Ignore empty lines and comments
-    if [[ -z "$line" || "$line" == "#"* ]]; then
-      continue
-    fi
-
-    echo "$line"
-  done < "$list_file"
-}
 
 PROFILE_DIR=$1
-if [[ -z "$PROFILE_DIR" || ! -d "$PROFILE_DIR" ]]; then
+if [[ -z $PROFILE_DIR || ! -d $PROFILE_DIR ]]; then
   echo "Usage: $0 <profile_directory>" >&2
   exit 1
 fi
@@ -51,12 +33,11 @@ trap 'rm -f "$PACMAN_CONF" "$MAKEPKG_TEMP_CONF" "$BUILD_QUEUE"' EXIT INT TERM
 cat /etc/makepkg.conf "$MAKEPKG_CONF" > "$MAKEPKG_TEMP_CONF"
 echo 'OPTIONS+=(!debug)' >> "$MAKEPKG_TEMP_CONF"
 
-# Parse packages
+# Parse package list file, ignoring comments and empty lines.
 PACKAGES=()
-mapfile -t PACKAGES < <(parse_list "$PROFILE_DIR/packages.txt")
-
-# Deduplicate packages
-mapfile -t PACKAGES < <(printf '%s\n' "${PACKAGES[@]}" | sort -u)
+if [[ -f "$PROFILE_DIR/packages.txt" ]]; then
+  mapfile -t PACKAGES < <(sed -e 's/#.*//' -e 's/[[:space:]]//g' -e '/^$/d' "$PROFILE_DIR/packages.txt")
+fi
 
 if (( ${#PACKAGES[@]} == 0 )); then
   echo "[$ARCH] No packages defined for this profile. Skipping."
@@ -75,20 +56,9 @@ DB_FILE="$REPO_DIR/$REPO_NAME.db.tar.zst"
 if [[ ! -f "$DB_FILE" ]]; then
   echo "[$ARCH] Pre-initializing empty database for $REPO_NAME..."
   repo-add "$DB_FILE"
-fi
-
-# Reconcile database to drop obsolete packages (those deleted from packages.txt and their dependencies)
-if [[ -f "$DB_FILE" && ${#PACKAGES[@]} -gt 0 ]]; then
-  echo "[$ARCH] Reconciling database to drop obsolete packages..."
-  OBSOLETE_PKGS=$(comm -23 \
-    <(repo-list "$DB_FILE" name 2>/dev/null | sort || true) \
-    <( (aur depends -n "${PACKAGES[@]}" 2>/dev/null | tr '\t' '\n'; printf '%s\n' "${PACKAGES[@]}") | sort -u ) \
-    | xargs || true)
-
-  if [[ -n "$OBSOLETE_PKGS" ]]; then
-    echo "[$ARCH] Removing obsolete packages from database: $OBSOLETE_PKGS"
-    repo-remove "$DB_FILE" $OBSOLETE_PKGS
-  fi
+elif [[ ${#PACKAGES[@]} -gt 0 ]]; then
+  # Reconcile database to drop obsolete packages (those deleted from packages.txt and their dependencies)
+  ./auv.py obsolete "$DB_FILE" "${PACKAGES[@]}"
 fi
 
 # Generate custom pacman.conf
@@ -100,7 +70,7 @@ SigLevel = Optional TrustAll
 Server = file://$REPO_DIR
 EOF
 
-if [[ -n "$GITHUB_REPOSITORY" ]]; then
+if [[ -n $GITHUB_REPOSITORY ]]; then
   echo "Server = https://github.com/${GITHUB_REPOSITORY}/releases/download/$ARCH" >> "$PACMAN_CONF"
 fi
 
@@ -114,11 +84,10 @@ AUR_ARGS=(
   --pacman-conf "$PACMAN_CONF"
   --makepkg-conf "$MAKEPKG_TEMP_CONF"
   --noconfirm
-  -r
   -C
 )
 
-if [[ "${NO_CHROOT}" != "1" ]]; then
+if [[ -z $CI ]]; then
   AUR_ARGS+=( -c -D "$CHROOT_DIR" )
 fi
 
@@ -135,8 +104,8 @@ echo "[$ARCH] The following packages need to be built:"
 cat "$BUILD_QUEUE"
 
 # Apply custom patches/scripts to the newly fetched/updated packages
-while read -r pkg_dir; do
-  [[ -z "$pkg_dir" ]] && continue
+while read -r pkg_dir || [[ -n $pkg_dir ]]; do
+  [[ -z $pkg_dir ]] && continue
   pkg=$(basename "$pkg_dir")
 
   if [[ -f "$PWD/patches/$pkg.patch" || -x "$PWD/patches/$pkg.sh" ]]; then
