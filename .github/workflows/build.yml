@@ -33,16 +33,16 @@ jobs:
 
       - uses: actions/checkout@v6
 
-      - name: Cache Pacman Packages
-        uses: actions/cache@v5
+      - name: Restore Pacman Packages Cache
+        uses: actions/cache/restore@v5
         with:
           path: pacman-cache
           key: pacman-cache-${{ matrix.profile }}-${{ github.run_id }}
           restore-keys: |
             pacman-cache-${{ matrix.profile }}-
 
-      - name: Cache AUR Clones
-        uses: actions/cache@v5
+      - name: Restore AUR Clones Cache
+        uses: actions/cache/restore@v5
         with:
           path: clones
           key: aur-clones-${{ matrix.profile }}-${{ github.run_id }}
@@ -62,6 +62,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build Packages in Arch Container
+        id: build
         run: |
           mkdir -p pacman-cache clones
           docker run \
@@ -73,8 +74,13 @@ jobs:
             ghcr.io/${{ github.repository }}/auv-builder:latest \
             ./scripts/build-in-container.py ${{ matrix.profile }}
           sudo chown -R $USER:$USER pacman-cache clones
+          if [[ -s state/${{ matrix.profile }}/notify.txt ]]; then
+            echo "updated=1" >> "$GITHUB_OUTPUT"
+          fi
 
-      - run: ./scripts/sync-assets.sh ${{ matrix.profile }}
+      - name: Synchronize Release Assets
+        if: steps.build.outputs.updated == '1'
+        run: ./scripts/sync-assets.sh ${{ matrix.profile }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -82,3 +88,17 @@ jobs:
           GITHUB_SERVER_URL: ${{ github.server_url }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+      - name: Save Pacman Packages Cache
+        if: steps.build.outputs.updated == '1'
+        uses: actions/cache/save@v5
+        with:
+          path: pacman-cache
+          key: pacman-cache-${{ matrix.profile }}-${{ github.run_id }}
+
+      - name: Save AUR Clones Cache
+        if: steps.build.outputs.updated == '1'
+        uses: actions/cache/save@v5
+        with:
+          path: clones
+          key: aur-clones-${{ matrix.profile }}-${{ github.run_id }}

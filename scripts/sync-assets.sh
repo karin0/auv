@@ -14,10 +14,7 @@ ASSETS_FILE="state/$PROFILE/release-assets.txt"
 OBSOLETE_FILE="state/$PROFILE/obsolete-assets.txt"
 NOTIFY_FILE="state/$PROFILE/notify.txt"
 
-if [[ ! -s $NOTIFY_FILE ]]; then
-  echo "=== Database unchanged. Skipping synchronization. ==="
-  exit 0
-fi
+[[ -s $NOTIFY_FILE ]]
 
 # Remove release assets no longer in the database.
 if [[ -s $OBSOLETE_FILE ]]; then
