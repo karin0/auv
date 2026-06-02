@@ -72,8 +72,7 @@ jobs:
             ./scripts/build-in-container.sh ${{ matrix.profile }}
           sudo chown -R $USER:$USER pacman-cache clones
 
-      - name: Synchronize and Clean Repository Assets
-        run: ./scripts/clean-release-assets.sh ${{ matrix.profile }}
+      - run: ./scripts/sync-release-assets.sh ${{ matrix.profile }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -81,20 +80,3 @@ jobs:
           GITHUB_SERVER_URL: ${{ github.server_url }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-
-      - name: Ensure Release Tag Exists
-        run: |
-          gh release create ${{ matrix.profile }} \
-            --title ${{ matrix.profile }} \
-            --repo ${{ github.repository }} || true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload and Clobber Assets to Release Channel
-        run: |
-          gh release upload ${{ matrix.profile }} \
-            repos/${{ matrix.profile }}/* \
-            --clobber \
-            --repo ${{ github.repository }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

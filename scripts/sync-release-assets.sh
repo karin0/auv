@@ -13,9 +13,6 @@ REPO_DIR="repos/$PROFILE"
 ACTIVE_FILE="state/$PROFILE/active-packages.txt"
 NOTIFY_FILE="state/$PROFILE/notify-body.txt"
 
-# Runs on the GitHub runner: no database parsing, only gh/Telegram and the file
-# work the container left under state/<profile>/.
-
 # Remove release assets no longer in the database. Guard on a non-empty active
 # list so an empty/absent file never deletes everything.
 if [[ -s "$ACTIVE_FILE" ]]; then
@@ -72,4 +69,11 @@ $(cat "$NOTIFY_FILE")"
   else
     echo "Telegram credentials not set. Skipping notification."
   fi
+fi
+
+echo "=== Uploading and Clobbering Assets to Release Channel ==="
+if ! gh release upload "$PROFILE" "$REPO_DIR"/* --clobber --repo "$GITHUB_REPOSITORY"; then
+  echo "Upload failed. Creating release $PROFILE first ..."
+  gh release create "$PROFILE" --title "$PROFILE" --repo "$GITHUB_REPOSITORY"
+  exec gh release upload "$PROFILE" "$REPO_DIR"/* --clobber --repo "$GITHUB_REPOSITORY"
 fi
