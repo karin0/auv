@@ -31,7 +31,6 @@ def list_pkgs(base_dir: str) -> Iterable[str]:
 
 def main():
     profile = sys.argv[1]
-    subprocess.run(('sudo', 'pacman', '-Syu', '--noconfirm'), check=True)
 
     repo_dir = f'repos/{profile}'
     state_dir = f'state/{profile}'
@@ -61,11 +60,16 @@ def main():
             release_assets = frozenset(file for line in fp if (file := line.strip()))
 
         to_rm = []
+        signing = 'GPGKEY' in os.environ
         for name, pkg in packages.items():
             if pkg.filename not in release_assets:
                 # Recover manually deleted assets.
-                print(f'Asset {pkg.filename} missing; removing {name} to trigger rebuild...')
+                print(f'Asset {pkg.filename} missing; rebuilding {name}')
                 notify_warn('Missing', name)
+                to_rm.append(name)
+            elif signing and f'{pkg.filename}.sig' not in release_assets:
+                print(f'Signature {pkg.filename}.sig missing; rebuilding {name}')
+                notify_warn('Missing signature', name)
                 to_rm.append(name)
             elif name.endswith('-debug'):
                 # Drop historical debug packages, which should have been excluded by `sync.sh`.

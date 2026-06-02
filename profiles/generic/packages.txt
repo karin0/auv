@@ -5,6 +5,7 @@ byobu
 google-chrome
 visual-studio-code-bin
 jetbrains-toolbox
+claude-code
 antigravity-ide
 alhp-keyring
 alhp-mirrorlist

@@ -71,8 +71,10 @@ jobs:
             -w /workspace \
             -e GITHUB_REPOSITORY=${{ github.repository }} \
             -e CI=1 \
+            -e GPG_PRIVATE_KEY="${{ secrets.GPG_PRIVATE_KEY }}" \
+            -e GPG_KEY_ID="${{ secrets.GPG_KEY_ID }}" \
             ghcr.io/${{ github.repository }}/auv-builder:latest \
-            ./scripts/build-in-container.py ${{ matrix.profile }}
+            ./scripts/build.sh ${{ matrix.profile }}
           sudo chown -R $USER:$USER pacman-cache clones
           if [[ -s state/${{ matrix.profile }}/notify.txt ]]; then
             echo "updated=1" >> "$GITHUB_OUTPUT"

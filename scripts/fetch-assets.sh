@@ -35,11 +35,13 @@ gh release download "$PROFILE" \
 
 # Recreate database symlinks so repo-add and aurutils operate correctly.
 echo '=== Recovering database symlinks ==='
-for ext in db files; do
-  src="$REPO_DIR/$REPO_NAME.$ext"
-  dst="$REPO_NAME.$ext.tar.zst"
-  if [[ -f $src && ! -L $src && -f "$REPO_DIR/$dst" ]]; then
-    echo "Recreating symlink for $src -> $dst ..."
-    ln -sf "$dst" "$src"
-  fi
+for suf in '' .sig; do
+  for ext in db files; do
+    src="$REPO_DIR/$REPO_NAME.$ext$suf"
+    dst="$REPO_NAME.$ext.tar.zst$suf"
+    if [[ -f $src && ! -L $src && -f "$REPO_DIR/$dst" ]]; then
+      echo "Recreating symlink for $src -> $dst ..."
+      ln -sf "$dst" "$src"
+    fi
+  done
 done

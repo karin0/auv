@@ -55,7 +55,11 @@ mkdir -p "$REPO_DIR"
 DB_FILE="$REPO_DIR/$REPO_NAME.db.tar.zst"
 if [[ ! -f "$DB_FILE" ]]; then
   echo "[$ARCH] Pre-initializing empty database for $REPO_NAME..."
-  repo-add "$DB_FILE"
+  if [[ -n $GPGKEY ]]; then
+    repo-add -s -k "$GPGKEY" "$DB_FILE"
+  else
+    repo-add "$DB_FILE"
+  fi
 elif [[ ${#PACKAGES[@]} -gt 0 ]]; then
   # Reconcile database to drop obsolete packages (those deleted from packages.txt and their dependencies)
   ./auv.py obsolete "$DB_FILE" "${PACKAGES[@]}"
@@ -63,10 +67,17 @@ fi
 
 # Generate custom pacman.conf
 cp /etc/pacman.conf "$PACMAN_CONF"
+
+if [[ -n $GPGKEY ]]; then
+  SIG_LEVEL='Required'
+else
+  SIG_LEVEL='Optional TrustAll'
+fi
+
 cat <<EOF >> "$PACMAN_CONF"
 
 [$REPO_NAME]
-SigLevel = Optional TrustAll
+SigLevel = $SIG_LEVEL
 Server = file://$REPO_DIR
 EOF
 
@@ -86,6 +97,10 @@ AUR_ARGS=(
   --noconfirm
   -C
 )
+
+if [[ -n "$GPGKEY" ]]; then
+  AUR_ARGS+=( -S )
+fi
 
 if [[ -z $CI ]]; then
   AUR_ARGS+=( -c -D "$CHROOT_DIR" )
