@@ -35,4 +35,4 @@ if [[ -n $GPG_PRIVATE_KEY ]]; then
   sudo pacman-key --lsign-key "$GPGKEY"
 fi
 
-PYTHONUNBUFFERED=1 exec ./scripts/build.py "$@"
+PYTHONUNBUFFERED=1 exec "$(dirname $0)/build.py" "$@"

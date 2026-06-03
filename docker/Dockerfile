@@ -1,14 +1,18 @@
 FROM archlinux:latest
 
-COPY aurutils-*.pkg.tar.zst ./
+ARG PACMAN_REPO_NAME PACMAN_REPO_URL GPG_KEY_ID
+
+COPY key.asc .
 
 # expect is required by aurutils for non-interactive sessions
 # pacman-contrib for paccache, pyalpm for auv.py
-RUN pacman-key --init && \
+RUN echo -e "\n[$PACMAN_REPO_NAME]\nServer = $PACMAN_REPO_URL" >> /etc/pacman.conf && \
+    pacman-key --init && \
     pacman-key --populate archlinux && \
-    pacman -Syu --noconfirm base-devel git expect pacman-contrib pyalpm sudo && \
-    pacman -U --noconfirm aurutils-*.pkg.tar.zst && \
-    rm aurutils-*.pkg.tar.zst && \
+    pacman-key --add key.asc && \
+    rm key.asc && \
+    pacman-key --lsign-key "$GPG_KEY_ID" && \
+    pacman -Syu --noconfirm base-devel git expect pacman-contrib pyalpm sudo aurutils && \
     rm -r /var/cache/*
 
 # Should match UID/GID of GitHub Actions runners

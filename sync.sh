@@ -63,7 +63,7 @@ if [[ ! -f "$DB_FILE" ]]; then
   fi
 elif [[ ${#PACKAGES[@]} -gt 0 ]]; then
   # Reconcile database to drop obsolete packages (those deleted from packages.txt and their dependencies)
-  ./auv.py obsolete "$DB_FILE" "${PACKAGES[@]}"
+  "$(dirname $0)/auv.py" obsolete "$DB_FILE" "${PACKAGES[@]}"
 fi
 
 # Generate custom pacman.conf
@@ -82,10 +82,6 @@ SigLevel = $SIG_LEVEL
 Server = file://$REPO_DIR
 EOF
 
-if [[ -n $GITHUB_REPOSITORY ]]; then
-  echo "Server = https://github.com/${GITHUB_REPOSITORY}/releases/download/$ARCH" >> "$PACMAN_CONF"
-fi
-
 # Set AURDEST for clones
 export AURDEST="$PWD/clones"
 mkdir -p "$AURDEST"
@@ -98,17 +94,11 @@ AUR_ARGS=(
   --noconfirm
   -C
 )
-
-if [[ -n "$GPGKEY" ]]; then
-  AUR_ARGS+=( -S )
-fi
-
-if [[ -z $CI ]]; then
-  AUR_ARGS+=( -c -D "$CHROOT_DIR" )
-fi
+[[ -n "$GPGKEY" ]] && AUR_ARGS+=( -S )
+[[ -z $CI ]] && AUR_ARGS+=( -c -D "$CHROOT_DIR" )
 
 # Find out which packages actually need to be updated/built
-echo "[$ARCH] Analyzing dependencies and fetching packages..."
+echo "[$ARCH] Syncing packages..."
 aur sync --nobuild --noview "${AUR_ARGS[@]}" "${PACKAGES[@]}" > "$BUILD_QUEUE"
 
 if [[ ! -s "$BUILD_QUEUE" ]]; then
@@ -137,6 +127,10 @@ while read -r pkg_dir || [[ -n $pkg_dir ]]; do
     fi
   fi
 done < "$BUILD_QUEUE"
+
+if [[ -n $GITHUB_REPOSITORY ]]; then
+  echo "Server = https://github.com/$GITHUB_REPOSITORY/releases/download/$ARCH" >> "$PACMAN_CONF"
+fi
 
 # 3. Build Phase: Build the packages using aur build
 echo "[$ARCH] Starting build for the packages in the queue..."

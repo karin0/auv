@@ -5,7 +5,7 @@ import subprocess
 import sys
 from typing import TYPE_CHECKING
 
-sys.path.append(os.getcwd())
+sys.path.append(ROOT := os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from auv import load_packages, repo_add, repo_remove
 
@@ -85,7 +85,7 @@ def main():
         release_assets = ()
 
     print('=== Running package sync ===')
-    subprocess.run(('./sync.sh', profile_dir), check=True)
+    subprocess.run((os.path.join(ROOT, 'sync.sh'), profile_dir), check=True)
 
     # Keep only the latest cached version of each package
     print('=== Cleaning up Pacman cache ===')
