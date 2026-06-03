@@ -28,10 +28,10 @@ cat "$ASSETS_FILE"
 
 echo "=== Downloading Pacman database for profile '$PROFILE' ==="
 gh release download "$PROFILE" \
-  --dir "$REPO_DIR" \
-  --pattern "$REPO_NAME.db*" \
-  --pattern "$REPO_NAME.files*" \
-  --repo "$GITHUB_REPOSITORY"
+  -D "$REPO_DIR" \
+  -p "$REPO_NAME.db.tar.zst*" \
+  -p "$REPO_NAME.files.tar.zst*" \
+  -R "$GITHUB_REPOSITORY"
 
 # Recreate database symlinks so repo-add and aurutils operate correctly.
 echo '=== Recovering database symlinks ==='
@@ -39,9 +39,9 @@ for suf in '' .sig; do
   for ext in db files; do
     src="$REPO_DIR/$REPO_NAME.$ext$suf"
     dst="$REPO_NAME.$ext.tar.zst$suf"
-    if [[ -f $src && ! -L $src && -f "$REPO_DIR/$dst" ]]; then
+    if [[ -f "$REPO_DIR/$dst" ]]; then
       echo "Recreating symlink for $src -> $dst ..."
-      ln -sf "$dst" "$src"
+      ln -s "$dst" "$src"
     fi
   done
 done
