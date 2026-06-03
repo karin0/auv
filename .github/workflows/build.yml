@@ -17,6 +17,9 @@ permissions:
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
+    concurrency:
+      group: build-${{ matrix.profile }}
+      cancel-in-progress: false
     strategy:
       fail-fast: false
       matrix:
@@ -75,7 +78,7 @@ jobs:
             -e GPG_KEY_ID="${{ secrets.GPG_KEY_ID }}" \
             ghcr.io/${{ github.repository }}/auv-builder:latest \
             ./scripts/build.sh ${{ matrix.profile }}
-          sudo chown -R $USER:$USER pacman-cache clones
+          sudo chown -R $USER:$USER .
           if [[ -s state/${{ matrix.profile }}/notify.txt ]]; then
             echo "updated=1" >> "$GITHUB_OUTPUT"
           fi
