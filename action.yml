@@ -74,7 +74,11 @@ runs:
           "$image" \
           /action/scripts/build.sh "${{ inputs.profile }}"
         sudo chown -R $USER:$USER pacman-cache clones
-        if [[ -s state/${{ inputs.profile }}/notify.txt ]]; then
+        cd "state/${{ inputs.profile }}"
+        if [[ -s notify.txt ]]; then
+          echo "updated=1" >> "$GITHUB_OUTPUT"
+          echo "save=1" >> "$GITHUB_OUTPUT"
+        elif [[ -s obsolete-assets.txt ]]; then
           echo "updated=1" >> "$GITHUB_OUTPUT"
         fi
 
@@ -91,14 +95,14 @@ runs:
         TELEGRAM_CHAT_ID: ${{ inputs.telegram_chat_id }}
 
     - name: Save Pacman Packages Cache
-      if: steps.build.outputs.updated == '1'
+      if: steps.build.outputs.save == '1'
       uses: actions/cache/save@v5
       with:
         path: pacman-cache
         key: pacman-cache-${{ inputs.profile }}-${{ github.run_id }}
 
     - name: Save AUR Clones Cache
-      if: steps.build.outputs.updated == '1'
+      if: steps.build.outputs.save == '1'
       uses: actions/cache/save@v5
       with:
         path: clones

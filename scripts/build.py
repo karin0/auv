@@ -132,10 +132,10 @@ def main():
         if obsolete_assets := [
             asset
             for asset in release_assets
-            if (base := asset.removesuffix('.sig')).endswith(PKG_EXT)
-            and base not in active_filenames
+            if (base := asset.removesuffix('.sig')).endswith('.old')
+            or (base.endswith(PKG_EXT) and base not in active_filenames)
         ]:
-            print(f'Obsolete assets detected: {', '.join(obsolete_assets)}')
+            print(f'Obsolete assets found: {', '.join(obsolete_assets)}')
             with open(obsolete_assets_path, 'w') as fp:
                 fp.write('\n'.join(obsolete_assets))
 

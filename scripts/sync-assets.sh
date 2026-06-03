@@ -14,8 +14,6 @@ ASSETS_FILE="state/$PROFILE/release-assets.txt"
 OBSOLETE_FILE="state/$PROFILE/obsolete-assets.txt"
 NOTIFY_FILE="state/$PROFILE/notify.txt"
 
-[[ -s $NOTIFY_FILE ]]
-
 # Remove release assets no longer in the database.
 if [[ -s $OBSOLETE_FILE ]]; then
   echo "=== Removing obsolete release assets ==="
@@ -28,10 +26,15 @@ else
   echo "=== No obsolete release assets. ==="
 fi
 
+if [[ ! -s $NOTIFY_FILE ]]; then
+  echo "=== No database events, skipping asset sync. ==="
+  exit 0
+fi
+
 cd "$REPO_DIR"
 
 # Remove database backups so they aren't uploaded as assets
-rm -f -- *.old
+rm -f -- *.old *.old.sig
 
 # Resolve database symlinks (symlinks fail to upload as release assets)
 for file in *; do
