@@ -28,11 +28,12 @@ if [[ -n $GPG_PRIVATE_KEY ]]; then
     GPG_KEY_ID=$(gpg --list-secret-keys --with-colons | awk -F: '/^sec:/ {print $5; exit}')
   fi
   export GPGKEY="$GPG_KEY_ID"
+  unset GPG_PRIVATE_KEY GPG_KEY_ID
   echo "[$PROFILE] Using GPG key ID: $GPGKEY"
 
-  echo "[$PROFILE] Adding GPG key to pacman keyring ..."
   gpg --export "$GPGKEY" | sudo pacman-key --add -
   sudo pacman-key --lsign-key "$GPGKEY"
+  sudo pacman-key --finger "$GPGKEY"
 fi
 
 PYTHONUNBUFFERED=1 exec "$(dirname "$0")/build.py" "$@"
