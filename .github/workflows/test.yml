@@ -1,0 +1,58 @@
+name: Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: 'Profile name'
+        required: true
+        default: 'test'
+      packages:
+        description: 'AUR packages to build'
+        required: true
+        default: 'neatvi-git'
+      sign:
+        description: 'Enable signing'
+        type: boolean
+        required: true
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  test-build:
+    runs-on: ubuntu-latest
+    env:
+      GPG_PRIVATE_KEY: ''
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup profile
+        env:
+          PACKAGE_LIST: ${{ inputs.packages }}
+        run: |
+          mkdir -p profiles/${{ inputs.profile }}
+          echo "$PACKAGE_LIST" > profiles/${{ inputs.profile }}/packages.txt
+
+      - name: Generate signing key
+        if: ${{ inputs.sign }}
+        run: |
+          gpg --batch --generate-key <<EOF
+          Key-Type: RSA
+          Name-Real: AUV!
+          %no-protection
+          %commit
+          EOF
+
+          GPG_PRIVATE_KEY=$(gpg --armor --export-secret-keys)
+
+          echo "GPG_PRIVATE_KEY<<EOF" >> "$GITHUB_ENV"
+          echo "$GPG_PRIVATE_KEY" >> "$GITHUB_ENV"
+          echo "EOF" >> "$GITHUB_ENV"
+
+      - uses: ./
+        with:
+          profile: ${{ inputs.profile }}
+          gpg_private_key: ${{ env.GPG_PRIVATE_KEY }}
