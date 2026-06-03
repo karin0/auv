@@ -10,12 +10,11 @@ echo '=== Starting AUR Build ==='
 echo "=== Timestamp: $(date) ==="
 echo '=================================================='
 
+root="$(dirname "$0")"
+
 # Find and build all profiles
-for dir in "$PWD/profiles"/*/; do
-  dir_name=$(basename "$dir")
-  if [[ -f "$PWD/profiles/$dir_name/makepkg.conf" ]]; then
-    ./sync.sh "$dir"
-  fi
+for dir in profiles/*/; do
+  "$root/sync.sh" "$dir"
 done
 
 echo '=================================================='

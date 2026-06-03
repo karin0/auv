@@ -1,0 +1,105 @@
+name: AUR Voyager
+description: Build and publish AUR packages to releases
+inputs:
+  profile:
+    description: 'The profile name to build'
+    required: true
+  gpg_private_key:
+    description: 'GPG private key for signing'
+    required: false
+  gpg_key_id:
+    description: 'GPG key ID for signing (defaults to first secret key if empty)'
+    required: false
+  telegram_bot_token:
+    description: 'Telegram Bot Token for notifications'
+    required: false
+  telegram_chat_id:
+    description: 'Telegram Chat ID for notifications'
+    required: false
+  builder_image:
+    description: 'Custom builder image (defaults to ghcr.io/<action_repo>/auv-builder:latest)'
+    required: false
+outputs:
+  updated:
+    description: 'Whether the database were updated'
+    value: ${{ steps.build.outputs.updated }}
+
+runs:
+  using: composite
+  steps:
+    - name: Restore Pacman Packages Cache
+      uses: actions/cache/restore@v5
+      with:
+        path: pacman-cache
+        key: pacman-cache-${{ inputs.profile }}-${{ github.run_id }}
+        restore-keys: |
+          pacman-cache-${{ inputs.profile }}-
+
+    - name: Restore AUR Clones Cache
+      uses: actions/cache/restore@v5
+      with:
+        path: clones
+        key: aur-clones-${{ inputs.profile }}-${{ github.run_id }}
+        restore-keys: |
+          aur-clones-${{ inputs.profile }}-
+
+    - name: Download Existing Database
+      shell: bash
+      run: ${{ github.action_path }}/scripts/fetch-assets.sh ${{ inputs.profile }} || echo 'Failed to fetch existing assets.'
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+
+    - name: Build Packages in Arch Container
+      id: build
+      shell: bash
+      env:
+        ACTION_REPOSITORY: ${{ github.action_repository }}
+      run: |
+        mkdir -p pacman-cache clones
+        image="${{ inputs.builder_image }}"
+        if [[ -z $image ]]; then
+          repo=$(echo "$ACTION_REPOSITORY" | tr '[:upper:]' '[:lower:]')
+          image="ghcr.io/$repo/auv-builder:latest"
+        fi
+        docker run \
+          -v "${{ github.action_path }}":/action \
+          -v "$PWD":/workspace \
+          -v "$PWD/pacman-cache":/var/cache/pacman/pkg \
+          -w /workspace \
+          -e GITHUB_REPOSITORY=${{ github.repository }} \
+          -e CI=1 \
+          -e GPG_PRIVATE_KEY="${{ inputs.gpg_private_key }}" \
+          -e GPG_KEY_ID="${{ inputs.gpg_key_id }}" \
+          "$image" \
+          /action/scripts/build.sh "${{ inputs.profile }}"
+        sudo chown -R $USER:$USER pacman-cache clones
+        if [[ -s state/${{ inputs.profile }}/notify.txt ]]; then
+          echo "updated=1" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Synchronize Release Assets
+      if: steps.build.outputs.updated == '1'
+      shell: bash
+      run: ${{ github.action_path }}/scripts/sync-assets.sh ${{ inputs.profile }}
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+        GITHUB_SERVER_URL: ${{ github.server_url }}
+        TELEGRAM_BOT_TOKEN: ${{ inputs.telegram_bot_token }}
+        TELEGRAM_CHAT_ID: ${{ inputs.telegram_chat_id }}
+
+    - name: Save Pacman Packages Cache
+      if: steps.build.outputs.updated == '1'
+      uses: actions/cache/save@v5
+      with:
+        path: pacman-cache
+        key: pacman-cache-${{ inputs.profile }}-${{ github.run_id }}
+
+    - name: Save AUR Clones Cache
+      if: steps.build.outputs.updated == '1'
+      uses: actions/cache/save@v5
+      with:
+        path: clones
+        key: aur-clones-${{ inputs.profile }}-${{ github.run_id }}
