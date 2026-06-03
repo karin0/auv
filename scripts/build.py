@@ -52,7 +52,7 @@ def main():
     os.makedirs(state_dir, exist_ok=True)
 
     # Database reconciliation against release assets
-    if packages := load_packages(db_file):
+    if os.path.exists(db_file) and (packages := load_packages(db_file)):
         # Force a rebuild of any package whose file is missing from the release.
         # The asset manifest must exist when the database exists.
         print('=== Reconciling database against release assets ===')
@@ -82,6 +82,7 @@ def main():
             del packages[name]
     else:
         print('No active packages.')
+        packages = {}
         release_assets = ()
 
     print('=== Running package sync ===')
@@ -91,7 +92,8 @@ def main():
     print('=== Cleaning up Pacman cache ===')
     subprocess.run(('sudo', 'paccache', '-rk1'), check=True)
 
-    # Filenames with colons are unsupported by GitHub release assets.
+    # Filenames with colons are unsupported by GitHub release assets and will be renamed
+    # if uploaded as-is, causing a database mismatch and client 404s.
     print('=== Renaming package files with colons in filenames ===')
     for filename in list_pkgs(repo_dir):
         if ':' in filename:
