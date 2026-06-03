@@ -27,14 +27,30 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Download pre-built aurutils from generic release
-        run: |
-          gh release download generic \
-            --pattern "aurutils-*.pkg.tar.zst" \
-            --dir docker \
-            --repo "$GITHUB_REPOSITORY"
+      - name: Fetch aurutils
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if ! gh release download generic --pattern 'aurutils-*.pkg.tar.zst' --dir docker --repo "$GITHUB_REPOSITORY"; then
+            echo "Bootstrapping aurutils ..."
+            docker run --rm \
+              -v "$PWD/docker":/workspace \
+              archlinux:latest \
+              bash -c '
+                set -e
+                pacman -Syu --noconfirm base-devel
+                useradd -m -u 1001 builder
+                echo "builder ALL=(ALL:ALL) NOPASSWD: ALL" >> /etc/sudoers
+                sudo -u builder bash -c "
+                  cd ~
+                  curl -sSfLO https://aur.archlinux.org/cgit/aur.git/snapshot/aurutils.tar.gz
+                  tar -xf aurutils.tar.gz
+                  cd aurutils
+                  makepkg -s --noconfirm --skippgpcheck
+                  cp aurutils-*.pkg.tar.zst /workspace/
+                "
+              '
+          fi
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
