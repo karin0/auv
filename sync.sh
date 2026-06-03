@@ -1,9 +1,7 @@
 #!/bin/bash
 # sync.sh: Syncs and builds AUR packages for a profile directory.
-# shellcheck disable=SC2218
 
 set -eo pipefail
-
 
 PROFILE_DIR=$1
 if [[ -z $PROFILE_DIR || ! -d $PROFILE_DIR ]]; then
@@ -17,10 +15,12 @@ ARCH=$(basename "$PROFILE_DIR")
 REPO_NAME="aur-$ARCH"
 REPO_DIR="$PWD/repos/$ARCH"
 CHROOT_DIR="$PWD/chroots/$ARCH"
+
+PACKAGES_FILE="$PROFILE_DIR/packages.txt"
 MAKEPKG_CONF="$PROFILE_DIR/makepkg.conf"
 
-if [[ ! -f "$MAKEPKG_CONF" ]]; then
-  echo 'Error: Profile directory must contain makepkg.conf' >&2
+if [ ! -f "$PACKAGES_FILE" ]; then
+  echo "[$ARCH] $PACKAGES_FILE not found, aborting." >&2
   exit 1
 fi
 
@@ -29,19 +29,20 @@ MAKEPKG_TEMP_CONF=$(mktemp --tmpdir "makepkg-aur-$ARCH.XXXXXX")
 BUILD_QUEUE=$(mktemp --tmpdir "aur-queue-$ARCH.XXXXXX")
 trap 'rm -f "$PACMAN_CONF" "$MAKEPKG_TEMP_CONF" "$BUILD_QUEUE"' EXIT INT TERM
 
-# Merge defaults with profile overrides
-cat /etc/makepkg.conf "$MAKEPKG_CONF" > "$MAKEPKG_TEMP_CONF"
+if [[ -f $MAKEPKG_CONF ]]; then
+  cat /etc/makepkg.conf "$MAKEPKG_CONF" > "$MAKEPKG_TEMP_CONF"
+else
+  cat /etc/makepkg.conf > "$MAKEPKG_TEMP_CONF"
+fi
 echo 'OPTIONS+=(!debug)' >> "$MAKEPKG_TEMP_CONF"
 
 # Parse package list file, ignoring comments and empty lines.
 PACKAGES=()
-if [[ -f "$PROFILE_DIR/packages.txt" ]]; then
-  mapfile -t PACKAGES < <(sed -e 's/#.*//' -e 's/[[:space:]]//g' -e '/^$/d' "$PROFILE_DIR/packages.txt")
-fi
+mapfile -t PACKAGES < <(sed -e 's/#.*//' -e 's/[[:space:]]//g' -e '/^$/d' "$PACKAGES_FILE")
 
 if (( ${#PACKAGES[@]} == 0 )); then
-  echo "[$ARCH] No packages defined for this profile. Skipping."
-  exit 0
+  echo "[$ARCH] No packages defined, aborting." >&2
+  exit 1
 fi
 
 echo '=================================================='
