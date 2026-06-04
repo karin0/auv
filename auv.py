@@ -15,6 +15,7 @@ class PackageInfo(NamedTuple):
     name: str
     version: str
     filename: str
+    base: str
 
 
 def _load_packages(db_file: str) -> Iterable[PackageInfo]:
@@ -25,7 +26,7 @@ def _load_packages(db_file: str) -> Iterable[PackageInfo]:
 
         db = pyalpm.Handle('/', scratch).register_syncdb('repo', 0)
         for pkg in db.pkgcache:
-            pkg = PackageInfo(pkg.name, pkg.version, pkg.filename)
+            pkg = PackageInfo(pkg.name, pkg.version, pkg.filename, pkg.base or pkg.name)
             print('Package:', pkg)
             yield pkg
 

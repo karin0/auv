@@ -119,9 +119,11 @@ def main():
     # Drop AUR clones removed from the database
     if os.path.isdir(aurdest):
         print('=== Cleaning up obsolete AUR clones ===')
+        active_bases = frozenset(pkg.base for pkg in packages.values())
         for ent in os.scandir(aurdest):
-            if ent.is_dir() and ent.name not in packages:
+            if ent.is_dir() and ent.name not in active_bases:
                 print(f'Removing obsolete AUR clone: {ent.name}')
+                notify_warn('Obsolete clone', ent.name)
                 shutil.rmtree(ent.path)
 
     # Produce obsolete list and state mutation events
