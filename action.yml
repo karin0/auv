@@ -43,17 +43,17 @@ runs:
       uses: actions/cache/restore@v5
       with:
         path: pacman-cache
-        key: pacman-cache-${{ inputs.release_tag }}-${{ github.run_id }}
+        key: pacman-${{ inputs.release_tag }}-${{ github.run_id }}
         restore-keys: |
-          pacman-cache-${{ inputs.release_tag }}-
+          pacman-${{ inputs.release_tag }}-
 
     - name: Restore AUR Clones Cache
       uses: actions/cache/restore@v5
       with:
         path: clones
-        key: aur-clones-${{ inputs.release_tag }}-${{ github.run_id }}
+        key: clones-${{ inputs.release_tag }}-${{ github.run_id }}
         restore-keys: |
-          aur-clones-${{ inputs.release_tag }}-
+          clones-${{ inputs.release_tag }}-
 
     - name: Download Existing Database
       shell: bash
@@ -115,11 +115,11 @@ runs:
       uses: actions/cache/save@v5
       with:
         path: pacman-cache
-        key: pacman-cache-${{ inputs.release_tag }}-${{ github.run_id }}
+        key: pacman-${{ inputs.release_tag }}-${{ github.run_id }}
 
     - name: Save AUR Clones Cache
       if: steps.build.outputs.save == '1'
       uses: actions/cache/save@v5
       with:
         path: clones
-        key: aur-clones-${{ inputs.release_tag }}-${{ github.run_id }}
+        key: clones-${{ inputs.release_tag }}-${{ github.run_id }}
