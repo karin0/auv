@@ -38,8 +38,15 @@ jobs:
 
       - uses: docker/setup-buildx-action@v4
 
-      - name: Write GPG public key file
-        run: echo "${{ vars.GPG_PUBLIC_KEY }}" > docker/key.asc
+      - name: Get runner UID/GID
+        id: id
+        run: |
+          set -e
+          uid=$(id -u)
+          gid=$(id -g)
+          echo "UID: $uid, GID: $gid"
+          echo "uid=$uid" >> "$GITHUB_OUTPUT"
+          echo "gid=$gid" >> "$GITHUB_OUTPUT"
 
       - uses: docker/build-push-action@v7
         with:
@@ -50,9 +57,8 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            PACMAN_REPO_NAME=${{ vars.PACMAN_REPO_NAME }}
-            PACMAN_REPO_URL=${{ vars.PACMAN_REPO_URL }}
-            GPG_KEY_ID=${{ vars.GPG_KEY_ID }}
+            UID=${{ steps.id.outputs.uid }}
+            GID=${{ steps.id.outputs.gid }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
