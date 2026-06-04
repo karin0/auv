@@ -5,7 +5,7 @@ shopt -s nullglob
 
 PROFILE=$1
 if [[ -z $PROFILE ]]; then
-  echo "Usage: $0 <profile>" >&2
+  echo "Usage: $0 <release_tag>" >&2
   exit 1
 fi
 

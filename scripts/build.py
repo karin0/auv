@@ -31,13 +31,14 @@ def list_pkgs(base_dir: str) -> Iterable[str]:
 
 def main():
     profile = sys.argv[1]
+    repo_name = os.environ['AUV_REPO_NAME']
+    sync_cmd = (os.path.join(ROOT, 'sync.sh'), profile, repo_name, os.environ['AUV_PACKAGES_FILE'])
 
     repo_dir = f'repos/{profile}'
     state_dir = f'state/{profile}'
-    profile_dir = f'profiles/{profile}'
     aurdest = 'clones'
 
-    db_file = f'{repo_dir}/aur-{profile}.db.tar.zst'
+    db_file = f'{repo_dir}/{repo_name}.db.tar.zst'
     release_assets_path = f'{state_dir}/release-assets.txt'
     obsolete_assets_path = f'{state_dir}/obsolete-assets.txt'
     notify_path = f'{state_dir}/notify.txt'
@@ -85,8 +86,8 @@ def main():
         packages = {}
         release_assets = ()
 
-    print('=== Running package sync ===')
-    subprocess.run((os.path.join(ROOT, 'sync.sh'), profile_dir), check=True)
+    print('=== Running package sync:', ' '.join(sync_cmd), '===')
+    subprocess.run(sync_cmd, check=True)
 
     # Keep only the latest cached version of each package
     print('=== Cleaning up Pacman cache ===')

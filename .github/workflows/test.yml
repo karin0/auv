@@ -29,12 +29,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Setup profile
+      - name: Setup package list
         env:
           PACKAGE_LIST: ${{ inputs.packages }}
         run: |
-          mkdir -p profiles/${{ inputs.profile }}
-          echo "$PACKAGE_LIST" > profiles/${{ inputs.profile }}/packages.txt
+          echo "$PACKAGE_LIST" > packages.txt
 
       - name: Generate signing key
         if: ${{ inputs.sign }}
@@ -54,5 +53,7 @@ jobs:
 
       - uses: ./
         with:
-          profile: ${{ inputs.profile }}
+          release_tag: ${{ inputs.profile }}
+          packages_file: packages.txt
+          repo_name: aur-${{ inputs.profile }}
           gpg_private_key: ${{ env.GPG_PRIVATE_KEY }}

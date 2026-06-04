@@ -1,14 +1,26 @@
 name: AUR Voyager
 description: Build and publish AUR packages to releases
 inputs:
-  profile:
-    description: 'The profile name to build'
+  release_tag:
+    description: 'Release tag name'
     required: true
+  packages_file:
+    description: 'Path to the packages list file'
+    required: true
+  repo_name:
+    description: 'Pacman repository name'
+    required: false
+  makepkg_conf_file:
+    description: 'Path to the makepkg.conf file'
+    required: false
+  patches_dir:
+    description: 'Path to the build patches directory'
+    required: false
   gpg_private_key:
     description: 'GPG private key for signing'
     required: false
   gpg_key_id:
-    description: 'GPG key ID for signing (defaults to first secret key if empty)'
+    description: 'GPG key ID for signing (defaults to first secret key)'
     required: false
   telegram_bot_token:
     description: 'Telegram Bot Token for notifications'
@@ -17,7 +29,7 @@ inputs:
     description: 'Telegram Chat ID for notifications'
     required: false
   builder_image:
-    description: 'Custom builder image (defaults to ghcr.io/<action_repo>/auv-builder:latest)'
+    description: 'Custom builder image'
     required: false
 outputs:
   updated:
@@ -31,21 +43,21 @@ runs:
       uses: actions/cache/restore@v5
       with:
         path: pacman-cache
-        key: pacman-cache-${{ inputs.profile }}-${{ github.run_id }}
+        key: pacman-cache-${{ inputs.release_tag }}-${{ github.run_id }}
         restore-keys: |
-          pacman-cache-${{ inputs.profile }}-
+          pacman-cache-${{ inputs.release_tag }}-
 
     - name: Restore AUR Clones Cache
       uses: actions/cache/restore@v5
       with:
         path: clones
-        key: aur-clones-${{ inputs.profile }}-${{ github.run_id }}
+        key: aur-clones-${{ inputs.release_tag }}-${{ github.run_id }}
         restore-keys: |
-          aur-clones-${{ inputs.profile }}-
+          aur-clones-${{ inputs.release_tag }}-
 
     - name: Download Existing Database
       shell: bash
-      run: ${{ github.action_path }}/scripts/fetch-assets.sh ${{ inputs.profile }} || echo 'Failed to fetch existing assets.'
+      run: ${{ github.action_path }}/scripts/fetch-assets.sh ${{ inputs.release_tag }} || echo 'Failed to fetch existing assets.'
       env:
         GITHUB_TOKEN: ${{ github.token }}
         GITHUB_REPOSITORY: ${{ github.repository }}
@@ -71,10 +83,14 @@ runs:
           -e CI=1 \
           -e GPG_PRIVATE_KEY="${{ inputs.gpg_private_key }}" \
           -e GPG_KEY_ID="${{ inputs.gpg_key_id }}" \
+          -e AUV_REPO_NAME="${{ inputs.repo_name || inputs.release_tag }}" \
+          -e AUV_PACKAGES_FILE="${{ inputs.packages_file }}" \
+          -e AUV_MAKEPKG_CONF_FILE="${{ inputs.makepkg_conf_file }}" \
+          -e AUV_PATCHES_DIR="${{ inputs.patches_dir }}" \
           "$image" \
-          /action/scripts/build.sh "${{ inputs.profile }}"
+          /action/scripts/build.sh ${{ inputs.release_tag }}
         sudo chown -R $USER:$USER pacman-cache clones
-        cd "state/${{ inputs.profile }}"
+        cd "state/${{ inputs.release_tag }}"
         if [[ -s notify.txt ]]; then
           echo "updated=1" >> "$GITHUB_OUTPUT"
           echo "save=1" >> "$GITHUB_OUTPUT"
@@ -85,7 +101,7 @@ runs:
     - name: Synchronize Release Assets
       if: steps.build.outputs.updated == '1'
       shell: bash
-      run: ${{ github.action_path }}/scripts/sync-assets.sh ${{ inputs.profile }}
+      run: ${{ github.action_path }}/scripts/sync-assets.sh ${{ inputs.release_tag }}
       env:
         GITHUB_TOKEN: ${{ github.token }}
         GITHUB_REPOSITORY: ${{ github.repository }}
@@ -99,11 +115,11 @@ runs:
       uses: actions/cache/save@v5
       with:
         path: pacman-cache
-        key: pacman-cache-${{ inputs.profile }}-${{ github.run_id }}
+        key: pacman-cache-${{ inputs.release_tag }}-${{ github.run_id }}
 
     - name: Save AUR Clones Cache
       if: steps.build.outputs.save == '1'
       uses: actions/cache/save@v5
       with:
         path: clones
-        key: aur-clones-${{ inputs.profile }}-${{ github.run_id }}
+        key: aur-clones-${{ inputs.release_tag }}-${{ github.run_id }}
