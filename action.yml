@@ -33,8 +33,8 @@ inputs:
     required: false
 outputs:
   updated:
-    description: 'Whether the database were updated'
-    value: ${{ steps.build.outputs.updated }}
+    description: 'Whether the repository was updated'
+    value: ${{ steps.build.outputs.sync }}
 
 runs:
   using: composite
@@ -57,7 +57,14 @@ runs:
 
     - name: Download Existing Database
       shell: bash
-      run: ${{ github.action_path }}/scripts/fetch-assets.sh ${{ inputs.release_tag }} || echo 'Failed to fetch existing assets.'
+      run: |
+        echo '::group::=== Fetching existing database ==='
+        ${{ github.action_path }}/scripts/fetch-assets.sh ${{ inputs.release_tag }}
+        res=$?
+        echo '::endgroup::'
+        [[ $res -ne 0 ]] && echo '::warning::Failed to fetch existing assets.'
+        exit $res
+      continue-on-error: true
       env:
         GITHUB_TOKEN: ${{ github.token }}
         GITHUB_REPOSITORY: ${{ github.repository }}
@@ -68,6 +75,7 @@ runs:
       env:
         ACTION_REPOSITORY: ${{ github.action_repository || github.repository }}
       run: |
+        echo '::group::=== Building packages in container ==='
         mkdir -p pacman-cache clones
         image="${{ inputs.builder_image }}"
         if [[ -z $image ]]; then
@@ -89,19 +97,29 @@ runs:
           -e AUV_PATCHES_DIR="${{ inputs.patches_dir }}" \
           "$image" \
           /action/scripts/build.sh ${{ inputs.release_tag }}
-        sudo chown -R $USER:$USER pacman-cache clones
-        cd "state/${{ inputs.release_tag }}"
-        if [[ -s notify.txt ]]; then
-          echo "updated=1" >> "$GITHUB_OUTPUT"
-          echo "save=1" >> "$GITHUB_OUTPUT"
-        elif [[ -s obsolete-assets.txt ]]; then
-          echo "updated=1" >> "$GITHUB_OUTPUT"
+        res=$?
+        if [[ $res -eq 0 ]]; then
+          sudo chown -R $USER:$USER pacman-cache clones
+          cd "state/${{ inputs.release_tag }}"
+          if [[ -s notify.txt ]]; then
+            echo "sync=1" >> "$GITHUB_OUTPUT"
+            echo "save=1" >> "$GITHUB_OUTPUT"
+          elif [[ -s obsolete-assets.txt ]]; then
+            echo "sync=1" >> "$GITHUB_OUTPUT"
+          fi
         fi
+        echo '::endgroup::'
+        exit $res
 
     - name: Synchronize Release Assets
-      if: steps.build.outputs.updated == '1'
+      if: steps.build.outputs.sync == '1'
       shell: bash
-      run: ${{ github.action_path }}/scripts/sync-assets.sh ${{ inputs.release_tag }}
+      run: |
+        echo '::group::=== Synchronizing release assets ==='
+        ${{ github.action_path }}/scripts/sync-assets.sh ${{ inputs.release_tag }}
+        res=$?
+        echo '::endgroup::'
+        exit $res
       env:
         GITHUB_TOKEN: ${{ github.token }}
         GITHUB_REPOSITORY: ${{ github.repository }}
