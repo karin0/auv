@@ -18,7 +18,8 @@ CHROOT_DIR="$PWD/chroots/$PROFILE"
 PACMAN_CONF=$(mktemp --tmpdir "pacman-$PROFILE.XXXXXX")
 MAKEPKG_TEMP_CONF=$(mktemp --tmpdir "makepkg-$PROFILE.XXXXXX")
 BUILD_QUEUE=$(mktemp --tmpdir "aur-queue-$PROFILE.XXXXXX")
-trap 'rm -f "$PACMAN_CONF" "$MAKEPKG_TEMP_CONF" "$BUILD_QUEUE"' EXIT INT TERM
+PACMAN_WRAPPER=$(mktemp --tmpdir "pacman-wrapper-$PROFILE.XXXXXX")
+trap 'rm -f "$PACMAN_CONF" "$MAKEPKG_TEMP_CONF" "$BUILD_QUEUE" "$PACMAN_WRAPPER"' EXIT INT TERM
 
 if [[ -n $AUV_MAKEPKG_CONF_FILE ]]; then
   cat /etc/makepkg.conf "$AUV_MAKEPKG_CONF_FILE" > "$MAKEPKG_TEMP_CONF"
@@ -51,7 +52,7 @@ if [[ ! -f "$DB_FILE" ]]; then
   else
     repo-add "$DB_FILE"
   fi
-elif [[ ${#PACKAGES[@]} -gt 0 ]]; then
+else
   # Reconcile database to drop obsolete packages (those deleted from packages file and their dependencies)
   "$(dirname "$0")/auv.py" obsolete "$DB_FILE" "${PACKAGES[@]}"
 fi
@@ -76,6 +77,17 @@ if [[ -n $GITHUB_REPOSITORY ]]; then
   echo "[$PROFILE] Adding release repo from $GITHUB_REPOSITORY"
   echo "Server = https://github.com/$GITHUB_REPOSITORY/releases/download/$PROFILE" >> "$PACMAN_CONF"
 fi
+
+sudo pacman --config "$PACMAN_CONF" -Syu --noconfirm || true
+
+# Ensure `makepkg -s` uses the custom pacman.conf
+cat <<EOF > "$PACMAN_WRAPPER"
+#!/bin/bash
+echo "> \$0 \$*" >&2
+exec pacman --config '$PACMAN_CONF' "\$@"
+EOF
+chmod +x "$PACMAN_WRAPPER"
+export PACMAN="$PACMAN_WRAPPER"
 
 # Set AURDEST for clones
 export AURDEST="$PWD/clones"
