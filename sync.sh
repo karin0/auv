@@ -29,18 +29,62 @@ fi
 echo 'OPTIONS+=(!debug)' >> "$MAKEPKG_TEMP_CONF"
 
 # Parse package list file, ignoring comments and empty lines.
-PACKAGES=()
-mapfile -t PACKAGES < <(sed -e 's/#.*//' -e 's/[[:space:]]//g' -e '/^$/d' "$PACKAGES_FILE")
+ENTRIES=()
+mapfile -t ENTRIES < <(sed -e 's/#.*//' -e 's/[[:space:]]//g' -e '/^$/d' "$PACKAGES_FILE")
 
-if (( ${#PACKAGES[@]} == 0 )); then
+if (( ${#ENTRIES[@]} == 0 )); then
   echo "[$PROFILE] No packages defined, aborting." >&2
   exit 1
 fi
 
+# An entry with a URL scheme is a git repository holding a PKGBUILD and its .SRCINFO,
+# and any other entry is an AUR package name.
+PACKAGES=()
+GIT_URLS=()
+for entry in "${ENTRIES[@]}"; do
+  if [[ $entry == *://* ]]; then
+    GIT_URLS+=("$entry")
+  else
+    PACKAGES+=("$entry")
+  fi
+done
+
 echo '=================================================='
 echo "[$PROFILE] Starting sync for repository: $REPO_NAME"
 echo "[$PROFILE] Packages: ${PACKAGES[*]}"
+echo "[$PROFILE] Git repositories: ${GIT_URLS[*]}"
 echo '=================================================='
+
+# Set AURDEST for clones
+export AURDEST="$PWD/clones"
+mkdir -p "$AURDEST"
+
+# Clone each git repository into the directory named after its pkgbase, as aurutils does for
+# the AUR, so that the clone cleanup in build.py keeps it.
+GIT_DIRS=()
+KEEP_ARGS=()
+for url in "${GIT_URLS[@]}"; do
+  pkg_dir="$AURDEST/$(basename "$url" .git)"
+  if [[ -d $pkg_dir ]]; then
+    git -C "$pkg_dir" remote set-url origin "$url"
+    git -C "$pkg_dir" fetch origin HEAD
+    git -C "$pkg_dir" reset --hard FETCH_HEAD
+    git -C "$pkg_dir" clean -df
+  else
+    git clone "$url" "$pkg_dir"
+  fi
+
+  pkgbase=$(sed -n 's/^pkgbase = //p' "$pkg_dir/.SRCINFO")
+  if [[ $pkgbase != "$(basename "$pkg_dir")" ]]; then
+    echo "[$PROFILE] $url holds pkgbase $pkgbase, which must match the repository name." >&2
+    exit 1
+  fi
+
+  GIT_DIRS+=("$pkg_dir")
+  while read -r pkgname; do
+    KEEP_ARGS+=(--keep "$pkgname")
+  done < <(sed -n 's/^pkgname = //p' "$pkg_dir/.SRCINFO")
+done
 
 # Ensure package database exists, preventing pacman from failing
 mkdir -p "$REPO_DIR"
@@ -54,7 +98,7 @@ if [[ ! -f "$DB_FILE" ]]; then
   fi
 else
   # Reconcile database to drop obsolete packages (those deleted from packages file and their dependencies)
-  "$(dirname "$0")/auv.py" obsolete "$DB_FILE" "${PACKAGES[@]}"
+  "$(dirname "$0")/auv.py" obsolete "$DB_FILE" "${PACKAGES[@]}" "${KEEP_ARGS[@]}"
 fi
 
 # Generate custom pacman.conf
@@ -89,10 +133,6 @@ EOF
 chmod +x "$PACMAN_WRAPPER"
 export PACMAN="$PACMAN_WRAPPER"
 
-# Set AURDEST for clones
-export AURDEST="$PWD/clones"
-mkdir -p "$AURDEST"
-
 # Common options shared by both aur sync and aur build
 AUR_ARGS=(
   -d "$REPO_NAME"
@@ -105,8 +145,23 @@ AUR_ARGS=(
 [[ -z $CI ]] && AUR_ARGS+=( -c -D "$CHROOT_DIR" )
 
 # Find out which packages actually need to be updated/built
-echo "[$PROFILE] Syncing packages with ${AUR_ARGS[*]} ..."
-aur sync --nobuild --noview "${AUR_ARGS[@]}" "${PACKAGES[@]}" > "$BUILD_QUEUE"
+if (( ${#PACKAGES[@]} > 0 )); then
+  echo "[$PROFILE] Syncing packages with ${AUR_ARGS[*]} ..."
+  aur sync --nobuild --noview "${AUR_ARGS[@]}" "${PACKAGES[@]}" > "$BUILD_QUEUE"
+fi
+
+# Queue each git repository whose .SRCINFO version is absent from or newer than the database.
+for pkg_dir in "${GIT_DIRS[@]}"; do
+  srcinfo="$pkg_dir/.SRCINFO"
+  epoch=$(sed -n 's/^\tepoch = //p' "$srcinfo")
+  version="${epoch:+$epoch:}$(sed -n 's/^\tpkgver = //p' "$srcinfo")-$(sed -n 's/^\tpkgrel = //p' "$srcinfo")"
+  pkgname=$(sed -n '0,/^pkgname = /s/^pkgname = //p' "$srcinfo")
+  current=$(aur repo -c "$PACMAN_CONF" -d "$REPO_NAME" --list | awk -v name="$pkgname" '$1 == name { print $2 }')
+  if [[ -z $current ]] || (( $(vercmp "$version" "$current") > 0 )); then
+    echo "[$PROFILE] $pkgname ${current:-(new)} -> $version"
+    echo "$pkg_dir" >> "$BUILD_QUEUE"
+  fi
+done
 
 if [[ ! -s "$BUILD_QUEUE" ]]; then
   echo "[$PROFILE] There is nothing to do."

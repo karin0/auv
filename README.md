@@ -92,6 +92,12 @@ To rebuild a specific package, simply delete it from the release assets and trig
 
 Output `updated` is set to `1` if the repository was changed.
 
+## Git repositories
+
+A package list entry with a URL scheme names a git repository laid out like an AUR one, with a `PKGBUILD` and its `.SRCINFO` at the top level. The repository name must equal the `pkgbase` in `.SRCINFO`. Each run fetches the default branch and builds the package when the version in `.SRCINFO` is newer than the published one.
+
+Dependencies of such a package are installed from the official repositories. AUR dependencies need to be specified separately in the same package list.
+
 ## Patches
 
 `patches_dir` can be specified to patch the AUR clones before the build starts.
