@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
+import argparse
 import os
 import subprocess
-import sys
 import tempfile
 from typing import TYPE_CHECKING, NamedTuple
 
@@ -54,26 +54,37 @@ def repo_remove(db_file: str, pkg_name: str) -> None:
     return _call_repo(['repo-remove'], db_file, pkg_name)
 
 
-def find_obsolete_packages(db_file: str, packages: list[str]) -> Iterable[str]:
-    '''Identify obsolete packages in the database.'''
+def find_obsolete_packages(db_file: str, packages: list[str], keep: list[str]) -> Iterable[str]:
+    '''Identify obsolete packages in the database.
+
+    `packages` are AUR names, kept along with their dependencies. `keep` names packages built
+    from git repositories, kept as they are.
+    '''
     active = {pkg.name for pkg in _load_packages(db_file)}
-    cmd = ('aur', 'depends', '-n', *packages)
-    depends = subprocess.run(cmd, capture_output=True, text=True, check=True).stdout
-    print('Depends:', depends)
-    for line in depends.splitlines():
-        for field in line.split('\t'):
-            if val := field.strip():
-                active.discard(val)
+    active.difference_update(keep)
+    if packages:
+        cmd = ('aur', 'depends', '-n', *packages)
+        depends = subprocess.run(cmd, capture_output=True, text=True, check=True).stdout
+        print('Depends:', depends)
+        for line in depends.splitlines():
+            for field in line.split('\t'):
+                if val := field.strip():
+                    active.discard(val)
     return active
 
 
 def main():
-    if len(sys.argv) < 3 or sys.argv[1] != 'obsolete':
-        sys.exit('Usage: auv.py obsolete <db_file> <package> [<package> ...]')
+    parser = argparse.ArgumentParser(prog='auv.py')
+    commands = parser.add_subparsers(dest='command', required=True)
+    obsolete = commands.add_parser('obsolete')
+    obsolete.add_argument('db_file')
+    obsolete.add_argument('packages', nargs='*')
+    obsolete.add_argument('--keep', action='append', default=[])
+    args = parser.parse_args()
 
-    for name in find_obsolete_packages(db_file := sys.argv[2], sys.argv[3:]):
+    for name in find_obsolete_packages(args.db_file, args.packages, args.keep):
         print('Removing obsolete package from database:', name)
-        repo_remove(db_file, name)
+        repo_remove(args.db_file, name)
 
 
 if __name__ == '__main__':
