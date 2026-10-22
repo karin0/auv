@@ -24,4 +24,9 @@ jobs:
 
       - run: uv run --no-sync pyright
 
-      - run: shellcheck *.sh scripts/*.sh
+      - run: shellcheck -- *.sh scripts/*.sh
+
+      # actionlint reads only workflow files; the composite action.yml stays outside its reach.
+      - run: |
+          bash <(curl -sSfL --max-time 60 https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash) 1.7.12
+          ./actionlint -color

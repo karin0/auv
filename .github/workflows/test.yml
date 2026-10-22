@@ -47,9 +47,11 @@ jobs:
 
           GPG_PRIVATE_KEY=$(gpg --armor --export-secret-keys)
 
-          echo "GPG_PRIVATE_KEY<<EOF" >> "$GITHUB_ENV"
-          echo "$GPG_PRIVATE_KEY" >> "$GITHUB_ENV"
-          echo "EOF" >> "$GITHUB_ENV"
+          {
+            echo "GPG_PRIVATE_KEY<<EOF"
+            echo "$GPG_PRIVATE_KEY"
+            echo "EOF"
+          } >> "$GITHUB_ENV"
 
       - uses: ./
         with:
