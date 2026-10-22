@@ -3,6 +3,7 @@ import argparse
 import os
 import subprocess
 import tempfile
+
 from typing import TYPE_CHECKING, NamedTuple
 
 import pyalpm

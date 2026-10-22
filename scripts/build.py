@@ -3,6 +3,7 @@ import os
 import shutil
 import subprocess
 import sys
+
 from typing import TYPE_CHECKING
 
 sys.path.append(ROOT := os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -60,7 +61,7 @@ def main():
         with open(release_assets_path) as fp:
             release_assets = frozenset(file for line in fp if (file := line.strip()))
 
-        to_rm = []
+        to_rm: list[str] = []
         signing = bool(os.environ.get('AUV_SIGN'))
         for name, pkg in packages.items():
             if pkg.filename not in release_assets:
