@@ -83,7 +83,7 @@ runs:
           image="ghcr.io/$repo/auv-builder:latest"
         fi
         docker run \
-          -v "${{ github.action_path }}":/action \
+          -v "${{ github.action_path }}":/action:ro \
           -v "$PWD":/workspace \
           -v "$PWD/pacman-cache":/var/cache/pacman/pkg \
           -w /workspace \
