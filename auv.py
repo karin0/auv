@@ -36,22 +36,12 @@ def load_packages(db_file: str) -> dict[str, PackageInfo]:
     return {pkg.name: pkg for pkg in _load_packages(db_file)}
 
 
-def _call_repo(cmd: list[str], *args: str) -> None:
-    if gpg_key := os.environ.get('GPGKEY'):
-        cmd.extend(('--sign', '--key', gpg_key))
-    cmd.extend(args)
-    subprocess.run(cmd, check=True)
-
-
 def repo_add(db_file: str, pkg_file: str) -> None:
-    cmd = ['repo-add']
-    if os.path.exists(pkg_file + '.sig'):
-        cmd.append('--include-sigs')
-    return _call_repo(cmd, db_file, pkg_file)
+    subprocess.run(('repo-add', db_file, pkg_file), check=True)
 
 
 def repo_remove(db_file: str, pkg_name: str) -> None:
-    return _call_repo(['repo-remove'], db_file, pkg_name)
+    subprocess.run(('repo-remove', db_file, pkg_name), check=True)
 
 
 def find_obsolete_packages(db_file: str, packages: list[str], keep: list[str]) -> Iterable[str]:

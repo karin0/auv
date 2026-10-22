@@ -91,29 +91,20 @@ mkdir -p "$REPO_DIR"
 DB_FILE="$REPO_DIR/$REPO_NAME.db.tar.zst"
 if [[ ! -f "$DB_FILE" ]]; then
   echo "[$PROFILE] Pre-initializing empty database for $REPO_NAME..."
-  if [[ -n $GPGKEY ]]; then
-    repo-add -s -k "$GPGKEY" "$DB_FILE"
-  else
-    repo-add "$DB_FILE"
-  fi
+  repo-add "$DB_FILE"
 else
   # Reconcile database to drop obsolete packages (those deleted from packages file and their dependencies)
   "$(dirname "$0")/auv.py" obsolete "$DB_FILE" "${PACKAGES[@]}" "${KEEP_ARGS[@]}"
 fi
 
-# Generate custom pacman.conf
+# Generate custom pacman.conf. sign.sh signs the repository after the build, so pacman skips
+# signature checks on it here.
 cp /etc/pacman.conf "$PACMAN_CONF"
-
-if [[ -n $GPGKEY ]]; then
-  SIG_LEVEL='Required'
-else
-  SIG_LEVEL='Optional TrustAll'
-fi
 
 cat <<EOF >> "$PACMAN_CONF"
 
 [$REPO_NAME]
-SigLevel = $SIG_LEVEL
+SigLevel = Never
 Server = file://$REPO_DIR
 EOF
 
@@ -141,7 +132,6 @@ AUR_ARGS=(
   --noconfirm
   -C
 )
-[[ -n "$GPGKEY" ]] && AUR_ARGS+=( -S )
 [[ -z $CI ]] && AUR_ARGS+=( -c -D "$CHROOT_DIR" )
 
 # Find out which packages actually need to be updated/built
