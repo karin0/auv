@@ -74,7 +74,7 @@ See [karin0/aur](https://github.com/karin0/aur) for a working example with matri
 
 For each run, this action synchronizes the assets of the specified release tag with the package list, building any new/updated/missing packages and removing any dropped ones, along with their dependencies.
 
-To rebuild a specific package, simply delete it from the release assets and trigger the workflow again.~
+To rebuild a specific package, simply delete it from the release assets and trigger the workflow again.
 
 ## Inputs
 
