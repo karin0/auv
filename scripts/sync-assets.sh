@@ -3,6 +3,10 @@ set -eo pipefail
 
 shopt -s nullglob
 
+# Bounds for GitHub API calls; an upload carries every changed package of the run.
+GH_TIMEOUT=2m
+GH_UPLOAD_TIMEOUT=60m
+
 PROFILE=$1
 if [[ -z $PROFILE ]]; then
   echo "Usage: $0 <release_tag>" >&2
@@ -54,10 +58,10 @@ $(cat "$NOTIFY_FILE")"
   echo '=== Uploading Assets to Release Channel ==='
   if [[ ! -f $ASSETS_FILE ]]; then
     echo "Creating new release for $PROFILE first ..."
-    gh release create "$PROFILE" --title "$PROFILE" --repo "$GITHUB_REPOSITORY"
+    timeout "$GH_TIMEOUT" gh release create "$PROFILE" --title "$PROFILE" --repo "$GITHUB_REPOSITORY"
   fi
 
-  gh release upload "$PROFILE" "$REPO_DIR"/* --clobber --repo "$GITHUB_REPOSITORY"
+  timeout "$GH_UPLOAD_TIMEOUT" gh release upload "$PROFILE" "$REPO_DIR"/* --clobber --repo "$GITHUB_REPOSITORY"
 else
   echo '=== No database events, skipping upload. ==='
 fi
@@ -69,7 +73,7 @@ if [[ -s $OBSOLETE_FILE ]]; then
   while read -r asset || [[ -n $asset ]]; do
     [[ -z $asset ]] && continue
     echo "Deleting obsolete asset: $asset"
-    gh release delete-asset "$PROFILE" "$asset" -y --repo "$GITHUB_REPOSITORY" || echo "::warning::Failed to delete asset: $asset"
+    timeout "$GH_TIMEOUT" gh release delete-asset "$PROFILE" "$asset" -y --repo "$GITHUB_REPOSITORY" || echo "::warning::Failed to delete asset: $asset"
   done < "$OBSOLETE_FILE"
 else
   echo '=== No obsolete release assets. ==='

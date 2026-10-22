@@ -12,6 +12,7 @@ fi
 REPO_DIR="repos/$PROFILE"
 STATE_DIR="state/$PROFILE"
 ASSETS_FILE="$STATE_DIR/release-assets.txt"
+GH_TIMEOUT=10m
 
 rm -rf "$REPO_DIR" "$STATE_DIR"
 mkdir -p "$REPO_DIR" "$STATE_DIR"
@@ -21,13 +22,13 @@ mkdir -p "$REPO_DIR" "$STATE_DIR"
 echo '== Snapshotting current release assets ==='
 
 # For later steps, we must ensure the ASSETS_FILE exists iff the release exists.
-gh release view "$PROFILE" --json assets --jq '.assets[].name' --repo "$GITHUB_REPOSITORY" > "$ASSETS_FILE".1
+timeout "$GH_TIMEOUT" gh release view "$PROFILE" --json assets --jq '.assets[].name' --repo "$GITHUB_REPOSITORY" > "$ASSETS_FILE".1
 mv "$ASSETS_FILE".1 "$ASSETS_FILE"
 echo "Recorded $(grep -c . "$ASSETS_FILE") release assets:"
 cat "$ASSETS_FILE"
 
 echo "=== Downloading Pacman database from release '$PROFILE' ==="
-gh release download "$PROFILE" \
+timeout "$GH_TIMEOUT" gh release download "$PROFILE" \
   -D "$REPO_DIR" \
   -p "*.db.tar.zst*" \
   -p "*.files.tar.zst*" \
