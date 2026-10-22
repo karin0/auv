@@ -41,11 +41,11 @@ if [[ -s $NOTIFY_FILE ]]; then
     TEXT="<b>auv #$PROFILE</b> | <a href=\"$RELEASE_URL\">Release</a> | <a href=\"$ACTION_URL\">Action</a>
 $(cat "$NOTIFY_FILE")"
 
-    curl -sSf -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
-      -d "chat_id=$TELEGRAM_CHAT_ID" \
-      -d "text=$TEXT" \
-      -d "parse_mode=HTML" \
-      -d "disable_web_page_preview=true" > /dev/null || echo "Failed to send Telegram notification"
+    curl -sSf --max-time 30 --retry 3 "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+      --data-urlencode "chat_id=$TELEGRAM_CHAT_ID" \
+      --data-urlencode "text=$TEXT" \
+      -d parse_mode=HTML \
+      -d disable_web_page_preview=true > /dev/null || echo '::warning::Failed to send Telegram notification'
   else
     echo 'Telegram credentials not set. Skipping notification:'
     cat "$NOTIFY_FILE"
@@ -69,7 +69,7 @@ if [[ -s $OBSOLETE_FILE ]]; then
   while read -r asset || [[ -n $asset ]]; do
     [[ -z $asset ]] && continue
     echo "Deleting obsolete asset: $asset"
-    gh release delete-asset "$PROFILE" "$asset" -y --repo "$GITHUB_REPOSITORY" || echo "Failed to delete asset: $asset"
+    gh release delete-asset "$PROFILE" "$asset" -y --repo "$GITHUB_REPOSITORY" || echo "::warning::Failed to delete asset: $asset"
   done < "$OBSOLETE_FILE"
 else
   echo '=== No obsolete release assets. ==='
