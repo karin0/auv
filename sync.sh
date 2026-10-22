@@ -113,7 +113,7 @@ if [[ -n $GITHUB_REPOSITORY ]]; then
   echo "Server = https://github.com/$GITHUB_REPOSITORY/releases/download/$PROFILE" >> "$PACMAN_CONF"
 fi
 
-sudo pacman --config "$PACMAN_CONF" -Syu --noconfirm || true
+sudo pacman --config "$PACMAN_CONF" -Syu --noconfirm
 
 # Ensure `makepkg -s` uses the custom pacman.conf
 cat <<EOF > "$PACMAN_WRAPPER"
