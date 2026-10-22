@@ -62,9 +62,15 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - uses: actions/delete-package-versions@v5
-        with:
-          package-name: ${{ github.event.repository.name }}/auv-builder
-          package-type: container
-          min-versions-to-keep: 3
-          ignore-versions: '^(latest)$'
+      - name: Delete old image versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSIONS: /users/${{ github.repository_owner }}/packages/container/${{ github.event.repository.name }}%2Fauv-builder/versions
+        run: |
+          # Keep the version tagged latest and the 3 newest others.
+          gh api --paginate "$VERSIONS" \
+            --jq '.[] | select(any(.metadata.container.tags[]; . == "latest") | not) | "\(.created_at) \(.id)"' |
+            sort -r | tail -n +4 | while read -r _ id; do
+              echo "Deleting version $id"
+              gh api -X DELETE "$VERSIONS/$id"
+            done
