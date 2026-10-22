@@ -61,7 +61,7 @@ def main():
             release_assets = frozenset(file for line in fp if (file := line.strip()))
 
         to_rm = []
-        signing = 'GPGKEY' in os.environ
+        signing = bool(os.environ.get('AUV_SIGN'))
         for name, pkg in packages.items():
             if pkg.filename not in release_assets:
                 # Recover manually deleted assets.
@@ -107,9 +107,6 @@ def main():
 
             repo_remove(db_file, pkg_name)
             shutil.move(pkg_file, new_pkg_file)
-            if os.path.exists(sig_file := pkg_file + '.sig'):
-                shutil.move(sig_file, new_pkg_file + '.sig')
-
             repo_add(db_file, new_pkg_file)
 
     # Reload the modified database packages into memory

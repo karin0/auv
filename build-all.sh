@@ -24,6 +24,9 @@ for dir in profiles/*/; do
     unset AUV_MAKEPKG_CONF_FILE
   fi
   "$root/sync.sh" "$profile" "aur-$profile" "${dir}packages.txt"
+  if [[ -n $GPGKEY ]]; then
+    "$root/sign.sh" "repos/$profile" "aur-$profile"
+  fi
 done
 
 echo '=================================================='

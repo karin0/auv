@@ -82,6 +82,7 @@ runs:
           repo=$(echo "$ACTION_REPOSITORY" | tr '[:upper:]' '[:lower:]')
           image="ghcr.io/$repo/auv-builder:latest"
         fi
+        echo "image=$image" >> "$GITHUB_OUTPUT"
         docker run \
           -v "${{ github.action_path }}":/action:ro \
           -v "$PWD":/workspace \
@@ -89,8 +90,7 @@ runs:
           -w /workspace \
           -e GITHUB_REPOSITORY=${{ github.repository }} \
           -e CI=1 \
-          -e GPG_PRIVATE_KEY="${{ inputs.gpg_private_key }}" \
-          -e GPG_KEY_ID="${{ inputs.gpg_key_id }}" \
+          -e AUV_SIGN="${{ inputs.gpg_private_key && '1' }}" \
           -e AUV_REPO_NAME="${{ inputs.repo_name || inputs.release_tag }}" \
           -e AUV_PACKAGES_FILE="${{ inputs.packages_file }}" \
           -e AUV_MAKEPKG_CONF_FILE="${{ inputs.makepkg_conf_file }}" \
@@ -103,13 +103,33 @@ runs:
           cd "state/${{ inputs.release_tag }}"
           if [[ -s notify.txt ]]; then
             echo "sync=1" >> "$GITHUB_OUTPUT"
-            echo "save=1" >> "$GITHUB_OUTPUT"
+            echo "changed=1" >> "$GITHUB_OUTPUT"
           elif [[ -s obsolete-assets.txt ]]; then
             echo "sync=1" >> "$GITHUB_OUTPUT"
           fi
         fi
         echo '::endgroup::'
         exit $res
+
+    # PKGBUILDs run in the build container with passwordless sudo, so the key only enters a
+    # fresh container that sees nothing but the built repository.
+    - name: Sign Packages in Fresh Container
+      if: steps.build.outputs.changed == '1' && inputs.gpg_private_key != ''
+      shell: bash
+      env:
+        GPG_PRIVATE_KEY: ${{ inputs.gpg_private_key }}
+        GPG_KEY_ID: ${{ inputs.gpg_key_id }}
+        IMAGE: ${{ steps.build.outputs.image }}
+      run: |
+        echo '::group::=== Signing packages in container ==='
+        docker run --rm \
+          -v "${{ github.action_path }}":/action:ro \
+          -v "$PWD/repos/${{ inputs.release_tag }}":/repo \
+          -e GPG_PRIVATE_KEY \
+          -e GPG_KEY_ID \
+          "$IMAGE" \
+          /action/scripts/sign.sh /repo "${{ inputs.repo_name || inputs.release_tag }}"
+        echo '::endgroup::'
 
     - name: Synchronize Release Assets
       if: steps.build.outputs.sync == '1'
@@ -129,14 +149,14 @@ runs:
         TELEGRAM_CHAT_ID: ${{ inputs.telegram_chat_id }}
 
     - name: Save Pacman Packages Cache
-      if: steps.build.outputs.save == '1'
+      if: steps.build.outputs.changed == '1'
       uses: actions/cache/save@v5
       with:
         path: pacman-cache
         key: pacman-${{ inputs.release_tag }}-${{ github.run_id }}
 
     - name: Save AUR Clones Cache
-      if: steps.build.outputs.save == '1'
+      if: steps.build.outputs.changed == '1'
       uses: actions/cache/save@v5
       with:
         path: clones

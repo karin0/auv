@@ -11,7 +11,7 @@ A GitHub action that builds [AUR](https://aur.archlinux.org/) packages and publi
 
 - Keeps the repository up to date with the specified package list
 - Builds only the new and updated packages
-- Signs the database and packages with an optional GPG key
+- Signs the database and packages with an optional GPG key, which only enters a fresh container after all PKGBUILDs have run
 - Posts an optional Telegram summary when the repository updates
 
 ## Getting started
@@ -109,7 +109,7 @@ For each package `<pkgbase>`, `patches_dir` may contain:
 
 ## Standalone
 
-To build and host the packages locally without GitHub, [`sync.sh`](./sync.sh) and [`build-all.sh`](./build-all.sh) can be used with `aurutils` and `pyalpm` installed.
+To build and host the packages locally without GitHub, [`sync.sh`](./sync.sh) and [`build-all.sh`](./build-all.sh) can be used with `aurutils` and `pyalpm` installed. With `GPGKEY` set, `build-all.sh` signs each repository with that key through [`sign.sh`](./sign.sh).
 
 ## Credits
 
