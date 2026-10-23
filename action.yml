@@ -40,7 +40,7 @@ runs:
   using: composite
   steps:
     - name: Restore Pacman Packages Cache
-      uses: actions/cache/restore@v5
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: pacman-cache
         key: pacman-${{ inputs.release_tag }}-${{ github.run_id }}
@@ -48,7 +48,7 @@ runs:
           pacman-${{ inputs.release_tag }}-
 
     - name: Restore AUR Clones Cache
-      uses: actions/cache/restore@v5
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: clones
         key: clones-${{ inputs.release_tag }}-${{ github.run_id }}
@@ -150,14 +150,14 @@ runs:
 
     - name: Save Pacman Packages Cache
       if: steps.build.outputs.changed == '1'
-      uses: actions/cache/save@v5
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: pacman-cache
         key: pacman-${{ inputs.release_tag }}-${{ github.run_id }}
 
     - name: Save AUR Clones Cache
       if: steps.build.outputs.changed == '1'
-      uses: actions/cache/save@v5
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: clones
         key: clones-${{ inputs.release_tag }}-${{ github.run_id }}
