@@ -184,5 +184,9 @@ if [[ -n $PATCHES_DIR && -d $PATCHES_DIR ]]; then
   done < "$BUILD_QUEUE"
 fi
 
+# aur build refuses to update a database that carries a signature unless it signs, and sign.sh
+# signs the database again after the build.
+rm -f -- "$REPO_DIR/$REPO_NAME".{db,files}{,.tar.zst}.sig
+
 echo "[$PROFILE] Starting build for the packages in the queue..."
 aur build "${AUR_ARGS[@]}" -s -a "$BUILD_QUEUE"
